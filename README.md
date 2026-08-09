@@ -122,3 +122,8 @@ The app calculates the standard South African statutory public holidays, includi
 - Saturday and public holidays use the sequence from 09h00 through 15h00.
 - Sundays and Mondays remain automatically closed except public holidays.
 - Manual Supabase blocks still override the automatic schedule.
+
+
+## Public Notes
+
+The therapist dashboard field is now called **Notes**. Notes saved for a date are displayed publicly when a visitor selects that date. A small gold indicator appears on calendar dates that have a note.

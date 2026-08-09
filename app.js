@@ -243,7 +243,7 @@ async function loadSchedule() {
 
   const { data, error } = await db
     .from("schedule_days")
-    .select("day,whole_day,blocked_slots,custom_slots");
+    .select("day,whole_day,blocked_slots,custom_slots,private_note");
 
   if (error) {
     console.error(error);
@@ -258,7 +258,7 @@ async function loadSchedule() {
       wholeDay: row.whole_day,
       blockedSlots: row.blocked_slots || [],
       customSlots: row.custom_slots || [],
-      note: ""
+      note: row.private_note || ""
     };
   }
 
@@ -309,10 +309,13 @@ function renderCalendar(gridId, labelId, monthDate, selectedKey, handler) {
     ].filter(Boolean).join(" ");
 
     const badge = base.holiday ? `<span class="holiday-star">★</span>` : "";
+    const hasNote = !!(getDayData(key).note || "").trim();
+    const noteIndicator = hasNote ? `<span class="note-indicator" title="Notes available"></span>` : "";
 
     btn.innerHTML = `
       <span class="day-number">${date.getDate()}</span>
       ${badge}
+      ${noteIndicator}
       <span class="day-status"></span>
     `;
 
@@ -341,6 +344,17 @@ function renderPublic() {
 
   const data = getDayData(selectedDate);
   const base = baseAvailabilityForDay(selectedDate);
+
+  const publicNote = $("publicNote");
+  const noteText = (data.note || "").trim();
+  if (noteText) {
+    publicNote.innerHTML = `<strong>Notes</strong><p></p>`;
+    publicNote.querySelector("p").textContent = noteText;
+    publicNote.classList.remove("hidden");
+  } else {
+    publicNote.innerHTML = "";
+    publicNote.classList.add("hidden");
+  }
 
   if (base.holiday) {
     const notice = document.createElement("div");
