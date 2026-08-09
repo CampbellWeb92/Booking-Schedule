@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111111" />
+  <title>CampbellWeb Schedule</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="setupBanner" class="setup-banner hidden">
+    <strong>Supabase setup required.</strong>
+    Add your Project URL and publishable/anon key in <code>supabase-config.js</code>.
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="#schedule">
+      <span class="brand-mark">C</span>
+      <span><strong>CampbellWeb</strong><small>Appointment Schedule</small></span>
+    </a>
+    <div class="top-actions">
+      <span id="syncStatus" class="sync-status">Connecting…</span>
+      <button id="therapistBtn" class="btn btn-dark">Therapist Login</button>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section id="schedule" class="hero">
+      <p class="eyebrow">Live availability</p>
+      <h1>Session Schedule</h1>
+      <p class="hero-copy">Choose a date to view available appointment times.</p>
+    </section>
+
+    <section class="calendar-layout">
+      <div class="panel calendar-panel">
+        <div class="calendar-header">
+          <button id="prevMonth" class="icon-btn" aria-label="Previous month">‹</button>
+          <h2 id="monthLabel"></h2>
+          <button id="nextMonth" class="icon-btn" aria-label="Next month">›</button>
+        </div>
+        <div class="weekdays">
+          <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span>
+          <span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+        <div class="legend">
+          <span><i class="dot available"></i> Available</span>
+          <span><i class="dot partial"></i> Partly blocked</span>
+          <span><i class="dot blocked"></i> Fully blocked</span>
+        </div>
+      </div>
+
+      <aside class="panel availability-panel">
+        <div>
+          <p class="eyebrow">Selected date</p>
+          <h2 id="selectedDateLabel"></h2>
+        </div>
+        <div id="publicSlots" class="slot-list"></div>
+      </aside>
+    </section>
+  </main>
+
+  <div id="loginModal" class="modal hidden">
+    <div class="modal-card login-card">
+      <button class="modal-close" data-close="loginModal">×</button>
+      <p class="eyebrow">Private access</p>
+      <h2>Therapist sign in</h2>
+      <form id="loginForm">
+        <label>Email
+          <input id="loginEmail" type="email" value="infocampbellweb@gmail.com" autocomplete="username" required>
+        </label>
+        <label>Password
+          <input id="loginPassword" type="password" autocomplete="current-password" required>
+        </label>
+        <p id="loginError" class="form-error"></p>
+        <button type="submit" class="btn btn-red btn-full">Sign in</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="adminModal" class="modal hidden">
+    <div class="modal-card admin-card">
+      <div class="admin-top">
+        <div>
+          <p class="eyebrow">Therapist dashboard</p>
+          <h2>Manage availability</h2>
+        </div>
+        <div class="admin-actions">
+          <button id="logoutBtn" class="btn btn-outline">Log out</button>
+          <button class="modal-close static-close" data-close="adminModal">×</button>
+        </div>
+      </div>
+
+      <div class="admin-grid">
+        <section class="admin-calendar">
+          <div class="calendar-header compact">
+            <button id="adminPrevMonth" class="icon-btn">‹</button>
+            <h3 id="adminMonthLabel"></h3>
+            <button id="adminNextMonth" class="icon-btn">›</button>
+          </div>
+          <div class="weekdays">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span>
+            <span>Thu</span><span>Fri</span><span>Sat</span>
+          </div>
+          <div id="adminCalendarGrid" class="calendar-grid admin-calendar-grid"></div>
+        </section>
+
+        <section class="manage-panel">
+          <p class="eyebrow">Editing</p>
+          <h3 id="adminSelectedDateLabel"></h3>
+
+          <label class="switch-row">
+            <span>
+              <strong>Block entire date</strong>
+              <small>No time slots will be available.</small>
+            </span>
+            <input id="blockWholeDay" type="checkbox">
+          </label>
+
+          <div class="divider"></div>
+
+          <div class="manage-heading">
+            <strong>Block individual hours</strong>
+            <small>Tap a time to block/unblock it.</small>
+          </div>
+          <div id="adminSlots" class="admin-slots"></div>
+
+          <form id="customSlotForm" class="custom-time-form">
+            <label>Custom time
+              <input id="customTime" type="time" step="1800">
+            </label>
+            <button class="btn btn-outline" type="submit">Add time</button>
+          </form>
+
+          <div class="divider"></div>
+
+          <label>Private note
+            <textarea id="dayNote" rows="3" placeholder="Optional private note"></textarea>
+          </label>
+
+          <div class="button-row">
+            <button id="clearDayBtn" class="btn btn-outline" type="button">Clear date</button>
+            <button id="saveDayBtn" class="btn btn-red" type="button">Save changes</button>
+          </div>
+          <p id="saveMessage" class="save-message"></p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
