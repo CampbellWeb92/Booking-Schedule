@@ -1,10 +1,10 @@
 // Massage by Ash Schedule
-// Business hours are automatic:
-// Tue-Fri 09:00-17:00
-// Sat 09:00-15:00
-// Sun/Mon closed, unless the date is a South African public holiday
-// Public holidays 09:00-15:00
-// Manual Supabase blocks always override the automatic business hours.
+// Automatic business hours:
+// Tuesday-Friday 09:00-17:00
+// Saturday 09:00-15:00
+// Sunday/Monday closed
+// South African public holidays 09:00-15:00
+// Manual Supabase blocks override automatic hours.
 
 const ADMIN_EMAIL = "infocampbellweb@gmail.com";
 
@@ -16,6 +16,7 @@ let selectedDate = isoDate(new Date());
 let adminSelectedDate = selectedDate;
 let adminDraft = null;
 let realtimeChannel = null;
+let deferredInstallPrompt = null;
 
 const $ = id => document.getElementById(id);
 
@@ -28,47 +29,47 @@ function configured() {
 
 function pad(n) { return String(n).padStart(2, "0"); }
 
-function isoDate(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function isoDate(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function parseISODate(k) {
-  const [y, m, d] = k.split("-").map(Number);
-  return new Date(y, m - 1, d);
+function parseISODate(key) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
-function startOfMonth(d) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function sameMonth(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-function prettyDate(k) {
-  return parseISODate(k).toLocaleDateString("en-ZA", {
-    weekday: "long",
+function prettyDate(key) {
+  return parseISODate(key).toLocaleDateString("en-ZA", {
+    weekday: "short",
     day: "numeric",
-    month: "long",
+    month: "short",
     year: "numeric"
   });
 }
 
-function monthText(d) {
-  return d.toLocaleDateString("en-ZA", { month: "long", year: "numeric" });
+function monthText(date) {
+  return date.toLocaleDateString("en-ZA", { month: "long", year: "numeric" });
 }
 
 function emptyDay() {
   return { wholeDay: false, blockedSlots: [], customSlots: [], note: "" };
 }
 
-function getDayData(k) {
-  return schedule[k] || emptyDay();
+function getDayData(key) {
+  return schedule[key] || emptyDay();
 }
 
 function makeBusinessSlots(startHour, endHour) {
-  // Time options follow the requested pattern: :00, :15 and :30.
-  // The closing hour itself is included as a final :00 option.
+  // User requested :00, :15 and :30 choices, e.g. 09h00, 09h15, 09h30.
+  // The closing hour is shown only as the final :00 option.
   const slots = [];
   for (let hour = startHour; hour <= endHour; hour++) {
     slots.push(`${pad(hour)}:00`);
@@ -84,7 +85,6 @@ function formatSlot(time) {
   return time.replace(":", "h");
 }
 
-// Gregorian Easter Sunday (Meeus/Jones/Butcher algorithm).
 function easterSunday(year) {
   const a = year % 19;
   const b = Math.floor(year / 100);
@@ -111,7 +111,6 @@ function addDays(date, amount) {
 
 function southAfricanPublicHolidays(year) {
   const easter = easterSunday(year);
-
   const holidays = [
     { date: new Date(year, 0, 1), name: "New Year's Day" },
     { date: new Date(year, 2, 21), name: "Human Rights Day" },
@@ -129,8 +128,6 @@ function southAfricanPublicHolidays(year) {
 
   const expanded = [...holidays];
 
-  // Public Holidays Act: if a statutory public holiday falls on Sunday,
-  // the following Monday is also a public holiday.
   for (const holiday of holidays) {
     if (holiday.date.getDay() === 0) {
       expanded.push({
@@ -145,16 +142,14 @@ function southAfricanPublicHolidays(year) {
 
 function publicHolidayFor(key) {
   const date = parseISODate(key);
-  const holiday = southAfricanPublicHolidays(date.getFullYear())
-    .find(item => isoDate(item.date) === key);
-  return holiday || null;
+  return southAfricanPublicHolidays(date.getFullYear())
+    .find(item => isoDate(item.date) === key) || null;
 }
 
 function baseAvailabilityForDay(key) {
   const date = parseISODate(key);
   const holiday = publicHolidayFor(key);
 
-  // Public holidays override the normal Sunday/Monday closure.
   if (holiday) {
     return {
       closed: false,
@@ -165,9 +160,9 @@ function baseAvailabilityForDay(key) {
     };
   }
 
-  const day = date.getDay();
+  const weekday = date.getDay();
 
-  if (day === 0 || day === 1) {
+  if (weekday === 0 || weekday === 1) {
     return {
       closed: true,
       holiday: false,
@@ -177,7 +172,7 @@ function baseAvailabilityForDay(key) {
     };
   }
 
-  if (day === 6) {
+  if (weekday === 6) {
     return {
       closed: false,
       holiday: false,
@@ -197,9 +192,6 @@ function baseAvailabilityForDay(key) {
 }
 
 function allSlotsForDay(key) {
-  // The automatic business-hours schedule defines the allowed times.
-  // custom_slots are intentionally ignored so the app cannot accidentally
-  // display a time outside the configured business hours.
   return baseAvailabilityForDay(key).slots;
 }
 
@@ -213,27 +205,28 @@ function statusForDay(key) {
   const slots = allSlotsForDay(key);
   const blocked = new Set(data.blockedSlots || []);
 
-  if (slots.length && slots.every(t => blocked.has(t))) return "blocked";
+  if (slots.length && slots.every(time => blocked.has(time))) return "blocked";
   if (blocked.size) return "partial";
   if (base.holiday) return "holiday";
   return "available";
 }
 
-function calendarDates(m) {
-  const first = new Date(m.getFullYear(), m.getMonth(), 1);
+function calendarDates(monthDate) {
+  const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
   const start = new Date(first);
-  start.setDate(first.getDate() - first.getDay());
+  const mondayOffset = (first.getDay() + 6) % 7;
+  start.setDate(first.getDate() - mondayOffset);
 
-  return Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    return d;
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return date;
   });
 }
 
 function setSync(text, error = false) {
   $("syncStatus").textContent = text;
-  $("syncStatus").style.color = error ? "#b41224" : "";
+  $("syncStatus").classList.toggle("error", error);
 }
 
 async function loadSchedule() {
@@ -255,7 +248,7 @@ async function loadSchedule() {
 
   for (const row of data || []) {
     schedule[row.day] = {
-      wholeDay: row.whole_day,
+      wholeDay: !!row.whole_day,
       blockedSlots: row.blocked_slots || [],
       customSlots: row.custom_slots || [],
       note: row.private_note || ""
@@ -290,37 +283,39 @@ function renderCalendar(gridId, labelId, monthDate, selectedKey, handler) {
   $(labelId).textContent = monthText(monthDate);
   const grid = $(gridId);
   grid.innerHTML = "";
-  const today = isoDate(new Date());
+  const todayKey = isoDate(new Date());
 
   calendarDates(monthDate).forEach(date => {
     const key = isoDate(date);
-    const status = statusForDay(key);
     const base = baseAvailabilityForDay(key);
-    const btn = document.createElement("button");
+    const status = statusForDay(key);
+    const note = (getDayData(key).note || "").trim();
 
-    btn.type = "button";
-    btn.title = base.holiday ? base.holidayName : base.label;
-    btn.className = [
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.date = key;
+    button.title = base.holiday ? base.holidayName : base.label;
+    button.className = [
       "day",
       sameMonth(date, monthDate) ? "" : "outside",
       key === selectedKey ? "selected" : "",
-      key === today ? "today" : "",
+      key === todayKey ? "today" : "",
+      note ? "has-note" : "",
       status
     ].filter(Boolean).join(" ");
 
-    const badge = base.holiday ? `<span class="holiday-star">★</span>` : "";
-    const hasNote = !!(getDayData(key).note || "").trim();
-    const noteIndicator = hasNote ? `<span class="note-indicator" title="Notes available"></span>` : "";
+    const holidayBadge = base.holiday ? '<span class="holiday-star" aria-label="Public holiday">★</span>' : "";
+    const noteBadge = note ? '<span class="note-indicator" aria-label="Note available"></span>' : "";
 
-    btn.innerHTML = `
+    button.innerHTML = `
       <span class="day-number">${date.getDate()}</span>
-      ${badge}
-      ${noteIndicator}
+      ${holidayBadge}
+      ${noteBadge}
       <span class="day-status"></span>
     `;
 
-    btn.onclick = () => handler(key);
-    grid.appendChild(btn);
+    button.addEventListener("click", () => handler(key));
+    grid.appendChild(button);
   });
 }
 
@@ -344,12 +339,16 @@ function renderPublic() {
 
   const data = getDayData(selectedDate);
   const base = baseAvailabilityForDay(selectedDate);
-
-  const publicNote = $("publicNote");
   const noteText = (data.note || "").trim();
+  const publicNote = $("publicNote");
+
   if (noteText) {
-    publicNote.innerHTML = `<strong>Notes</strong><p></p>`;
-    publicNote.querySelector("p").textContent = noteText;
+    publicNote.innerHTML = "";
+    const title = document.createElement("strong");
+    title.textContent = "Notes";
+    const paragraph = document.createElement("p");
+    paragraph.textContent = noteText;
+    publicNote.append(title, paragraph);
     publicNote.classList.remove("hidden");
   } else {
     publicNote.innerHTML = "";
@@ -364,37 +363,37 @@ function renderPublic() {
   }
 
   if (base.closed) {
-    wrap.insertAdjacentHTML(
-      "beforeend",
-      '<div class="empty-state"><strong>Closed</strong><br>Sundays and Mondays are regular off days.</div>'
-    );
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.innerHTML = "<strong>Closed</strong><br>Sundays and Mondays are regular off days.";
+    wrap.appendChild(empty);
     return;
   }
 
   if (data.wholeDay) {
-    wrap.insertAdjacentHTML(
-      "beforeend",
-      '<div class="empty-state">This date has been manually blocked.</div>'
-    );
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "This date has been manually blocked.";
+    wrap.appendChild(empty);
     return;
   }
 
   const blocked = new Set(data.blockedSlots || []);
-  const available = allSlotsForDay(selectedDate).filter(t => !blocked.has(t));
+  const available = allSlotsForDay(selectedDate).filter(time => !blocked.has(time));
 
   if (!available.length) {
-    wrap.insertAdjacentHTML(
-      "beforeend",
-      '<div class="empty-state">No appointment times are available on this date.</div>'
-    );
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No appointment times are available on this date.";
+    wrap.appendChild(empty);
     return;
   }
 
   available.forEach(time => {
-    const el = document.createElement("div");
-    el.className = "slot";
-    el.textContent = formatSlot(time);
-    wrap.appendChild(el);
+    const slot = document.createElement("div");
+    slot.className = "slot";
+    slot.textContent = formatSlot(time);
+    wrap.appendChild(slot);
   });
 }
 
@@ -410,15 +409,15 @@ function closeModal(id) {
   }
 }
 
-document.querySelectorAll("[data-close]").forEach(
-  b => b.onclick = () => closeModal(b.dataset.close)
-);
+document.querySelectorAll("[data-close]").forEach(button => {
+  button.addEventListener("click", () => closeModal(button.dataset.close));
+});
 
-document.querySelectorAll(".modal").forEach(
-  m => m.onclick = e => {
-    if (e.target === m) closeModal(m.id);
-  }
-);
+document.querySelectorAll(".modal").forEach(modal => {
+  modal.addEventListener("click", event => {
+    if (event.target === modal) closeModal(modal.id);
+  });
+});
 
 async function currentUser() {
   if (!db) return null;
@@ -426,7 +425,7 @@ async function currentUser() {
   return data.user || null;
 }
 
-$("therapistBtn").onclick = async () => {
+$("therapistBtn").addEventListener("click", async () => {
   if (!db) {
     $("setupBanner").classList.remove("hidden");
     return;
@@ -434,10 +433,10 @@ $("therapistBtn").onclick = async () => {
 
   const user = await currentUser();
   user ? openAdmin() : openModal("loginModal");
-};
+});
 
-$("loginForm").onsubmit = async e => {
-  e.preventDefault();
+$("loginForm").addEventListener("submit", async event => {
+  event.preventDefault();
   $("loginError").textContent = "";
 
   const email = $("loginEmail").value.trim();
@@ -461,12 +460,12 @@ $("loginForm").onsubmit = async e => {
   $("loginPassword").value = "";
   closeModal("loginModal");
   openAdmin();
-};
+});
 
-$("logoutBtn").onclick = async () => {
+$("logoutBtn").addEventListener("click", async () => {
   await db.auth.signOut();
   closeModal("adminModal");
-};
+});
 
 async function openAdmin() {
   adminViewDate = startOfMonth(parseISODate(adminSelectedDate));
@@ -481,19 +480,8 @@ async function loadAdminDraft() {
   adminDraft = {
     wholeDay: !!src.wholeDay,
     blockedSlots: [...(src.blockedSlots || [])],
-    customSlots: [],
-    note: ""
+    note: src.note || ""
   };
-
-  if (db) {
-    const { data } = await db
-      .from("schedule_days")
-      .select("private_note")
-      .eq("day", adminSelectedDate)
-      .maybeSingle();
-
-    if (data) adminDraft.note = data.private_note || "";
-  }
 }
 
 function renderAdmin() {
@@ -511,24 +499,21 @@ function renderAdmin() {
   );
 
   $("adminSelectedDateLabel").textContent = prettyDate(adminSelectedDate);
+  $("blockWholeDay").checked = adminDraft.wholeDay;
+  $("dayNote").value = adminDraft.note || "";
 
   const base = baseAvailabilityForDay(adminSelectedDate);
   const autoInfo = $("autoHoursInfo");
 
-  if (autoInfo) {
-    if (base.holiday) {
-      autoInfo.innerHTML = `<strong>${base.holidayName}</strong><span>Automatic public-holiday hours: 09h00 – 15h00</span>`;
-    } else if (base.closed) {
-      autoInfo.innerHTML = `<strong>Automatic off day</strong><span>Closed on Sundays and Mondays.</span>`;
-    } else if (parseISODate(adminSelectedDate).getDay() === 6) {
-      autoInfo.innerHTML = `<strong>Saturday</strong><span>Automatic hours: 09h00 – 15h00</span>`;
-    } else {
-      autoInfo.innerHTML = `<strong>Tuesday–Friday</strong><span>Automatic hours: 09h00 – 17h00</span>`;
-    }
+  if (base.holiday) {
+    autoInfo.innerHTML = `<strong>${base.holidayName}</strong><span>Automatic public-holiday hours: 09h00 – 15h00</span>`;
+  } else if (base.closed) {
+    autoInfo.innerHTML = "<strong>Automatic off day</strong><span>Closed on Sundays and Mondays.</span>";
+  } else if (parseISODate(adminSelectedDate).getDay() === 6) {
+    autoInfo.innerHTML = "<strong>Saturday</strong><span>Automatic hours: 09h00 – 15h00</span>";
+  } else {
+    autoInfo.innerHTML = "<strong>Tuesday – Friday</strong><span>Automatic hours: 09h00 – 17h00</span>";
   }
-
-  $("blockWholeDay").checked = adminDraft.wholeDay;
-  $("dayNote").value = adminDraft.note || "";
 
   renderAdminSlotsOnly();
 }
@@ -542,42 +527,65 @@ function renderAdminSlotsOnly() {
   const slots = allSlotsForDay(adminSelectedDate);
 
   if (base.closed) {
-    wrap.innerHTML = '<div class="empty-state">No hours to edit — this is an automatic off day.</div>';
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No hours to edit — this is an automatic off day.";
+    wrap.appendChild(empty);
     return;
   }
 
   slots.forEach(time => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = formatSlot(time);
-    btn.disabled = adminDraft.wholeDay;
-    btn.className = "admin-slot" + (blocked.has(time) ? " is-blocked" : "");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = formatSlot(time);
+    button.disabled = adminDraft.wholeDay;
+    button.className = "admin-slot" + (blocked.has(time) ? " is-blocked" : "");
 
-    btn.onclick = () => {
+    button.addEventListener("click", () => {
       const set = new Set(adminDraft.blockedSlots);
       set.has(time) ? set.delete(time) : set.add(time);
       adminDraft.blockedSlots = [...set].sort();
       renderAdminSlotsOnly();
-    };
+    });
 
-    wrap.appendChild(btn);
+    wrap.appendChild(button);
   });
 }
 
-$("blockWholeDay").onchange = e => {
-  adminDraft.wholeDay = e.target.checked;
+$("blockWholeDay").addEventListener("change", event => {
+  adminDraft.wholeDay = event.target.checked;
   renderAdminSlotsOnly();
-};
+});
 
-$("dayNote").oninput = e => {
-  adminDraft.note = e.target.value;
-};
+$("dayNote").addEventListener("input", event => {
+  adminDraft.note = event.target.value;
+});
 
-// The old custom-time form is hidden because this version follows fixed business hours.
-const customForm = $("customSlotForm");
-if (customForm) customForm.style.display = "none";
+function blockTimes(predicate) {
+  const slots = allSlotsForDay(adminSelectedDate);
+  const set = new Set(adminDraft.blockedSlots || []);
+  slots.filter(predicate).forEach(time => set.add(time));
+  adminDraft.blockedSlots = [...set].sort();
+  renderAdminSlotsOnly();
+}
 
-$("saveDayBtn").onclick = async () => {
+$("blockMorningBtn").addEventListener("click", () => {
+  blockTimes(time => Number(time.slice(0, 2)) < 12);
+});
+
+$("blockAfternoonBtn").addEventListener("click", () => {
+  blockTimes(time => Number(time.slice(0, 2)) >= 12);
+});
+
+$("restoreHoursBtn").addEventListener("click", () => {
+  adminDraft.wholeDay = false;
+  adminDraft.blockedSlots = [];
+  $("blockWholeDay").checked = false;
+  renderAdminSlotsOnly();
+  $("saveMessage").textContent = "Normal hours restored in the editor. Click Save changes.";
+});
+
+$("saveDayBtn").addEventListener("click", async () => {
   $("saveDayBtn").disabled = true;
   $("saveMessage").textContent = "Saving…";
 
@@ -606,13 +614,12 @@ $("saveDayBtn").onclick = async () => {
     return;
   }
 
-  $("saveMessage").textContent = "Saved to Supabase.";
+  $("saveMessage").textContent = "Saved.";
   await loadSchedule();
+  setTimeout(() => { $("saveMessage").textContent = ""; }, 1800);
+});
 
-  setTimeout(() => $("saveMessage").textContent = "", 1800);
-};
-
-$("clearDayBtn").onclick = async () => {
+$("clearDayBtn").addEventListener("click", async () => {
   const { error } = await db
     .from("schedule_days")
     .delete()
@@ -623,39 +630,165 @@ $("clearDayBtn").onclick = async () => {
     return;
   }
 
-  $("saveMessage").textContent = "Manual blocks cleared. Automatic hours restored.";
+  $("saveMessage").textContent = "Manual blocks and notes cleared. Automatic hours restored.";
   await loadSchedule();
   await loadAdminDraft();
   renderAdmin();
-};
+});
 
-$("prevMonth").onclick = () => {
+$("copyDayBtn").addEventListener("click", async () => {
+  const target = $("copyTargetDate").value;
+
+  if (!target) {
+    $("saveMessage").textContent = "Choose the date you want to copy to.";
+    return;
+  }
+
+  const targetBase = baseAvailabilityForDay(target);
+  const validTargetSlots = new Set(targetBase.slots);
+
+  const payload = {
+    day: target,
+    whole_day: adminDraft.wholeDay,
+    blocked_slots: [...new Set(adminDraft.blockedSlots)]
+      .filter(time => validTargetSlots.has(time))
+      .sort(),
+    custom_slots: [],
+    private_note: (adminDraft.note || "").trim(),
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await db
+    .from("schedule_days")
+    .upsert(payload, { onConflict: "day" });
+
+  if (error) {
+    console.error(error);
+    $("saveMessage").textContent = "Could not copy this date.";
+    return;
+  }
+
+  $("saveMessage").textContent = `Copied to ${prettyDate(target)}.`;
+  await loadSchedule();
+});
+
+$("blockRangeBtn").addEventListener("click", async () => {
+  const startKey = $("rangeStart").value;
+  const endKey = $("rangeEnd").value;
+
+  if (!startKey || !endKey) {
+    $("saveMessage").textContent = "Choose both From and To dates.";
+    return;
+  }
+
+  const startDate = parseISODate(startKey);
+  const endDate = parseISODate(endKey);
+
+  if (startDate > endDate) {
+    $("saveMessage").textContent = "The From date must be before the To date.";
+    return;
+  }
+
+  const rows = [];
+  const cursor = new Date(startDate);
+
+  while (cursor <= endDate) {
+    rows.push({
+      day: isoDate(cursor),
+      whole_day: true,
+      blocked_slots: [],
+      custom_slots: [],
+      private_note: "",
+      updated_at: new Date().toISOString()
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  $("blockRangeBtn").disabled = true;
+  $("saveMessage").textContent = "Blocking date range…";
+
+  const { error } = await db
+    .from("schedule_days")
+    .upsert(rows, { onConflict: "day" });
+
+  $("blockRangeBtn").disabled = false;
+
+  if (error) {
+    console.error(error);
+    $("saveMessage").textContent = "Could not block the date range.";
+    return;
+  }
+
+  $("saveMessage").textContent = `Blocked ${rows.length} date${rows.length === 1 ? "" : "s"}.`;
+  await loadSchedule();
+});
+
+$("prevMonth").addEventListener("click", () => {
   viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
   renderPublic();
-};
+});
 
-$("nextMonth").onclick = () => {
+$("nextMonth").addEventListener("click", () => {
   viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
   renderPublic();
-};
+});
 
-$("adminPrevMonth").onclick = () => {
+$("todayBtn").addEventListener("click", () => {
+  const today = new Date();
+  selectedDate = isoDate(today);
+  viewDate = startOfMonth(today);
+  renderPublic();
+});
+
+$("adminPrevMonth").addEventListener("click", () => {
   adminViewDate = new Date(adminViewDate.getFullYear(), adminViewDate.getMonth() - 1, 1);
   renderAdmin();
-};
+});
 
-$("adminNextMonth").onclick = () => {
+$("adminNextMonth").addEventListener("click", () => {
   adminViewDate = new Date(adminViewDate.getFullYear(), adminViewDate.getMonth() + 1, 1);
   renderAdmin();
-};
+});
 
-window.onkeydown = e => {
-  if (e.key === "Escape") {
-    document
-      .querySelectorAll(".modal:not(.hidden)")
-      .forEach(m => closeModal(m.id));
+$("adminTodayBtn").addEventListener("click", async () => {
+  const today = new Date();
+  adminSelectedDate = isoDate(today);
+  adminViewDate = startOfMonth(today);
+  await loadAdminDraft();
+  renderAdmin();
+});
+
+window.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    document.querySelectorAll(".modal:not(.hidden)").forEach(modal => closeModal(modal.id));
   }
-};
+});
+
+// PWA install support
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  $("installBtn").classList.remove("hidden");
+});
+
+$("installBtn").addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  $("installBtn").classList.add("hidden");
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  $("installBtn").classList.add("hidden");
+});
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js").catch(console.error);
+  });
+}
 
 async function init() {
   renderPublic();
@@ -674,8 +807,8 @@ async function init() {
 
     await loadSchedule();
     subscribeRealtime();
-  } catch (e) {
-    console.error(e);
+  } catch (error) {
+    console.error(error);
     $("setupBanner").classList.remove("hidden");
     setSync("Connection error", true);
   }

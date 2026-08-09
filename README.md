@@ -1,129 +1,99 @@
-# CampbellWeb Supabase Schedule
+# Massage by Ash Schedule App
 
-This is the live, multi-device version of the schedule app.
-
-## What changed
-
-- Availability is stored in Supabase instead of browser localStorage.
-- Therapist authentication uses Supabase Auth.
-- Only `infocampbellweb@gmail.com` may modify schedule rows under the included RLS policies.
-- Public visitors can read availability without logging in.
-- Realtime updates refresh open schedules when availability changes.
-
-## 1. Create a Supabase project
-
-Create/open your Supabase project.
-
-## 2. Create the therapist login
-
-In Supabase Dashboard:
-
-Authentication → Users → Add user / Create new user
-
-Email:
-`infocampbellweb@gmail.com`
-
-Password:
-Use the password you want for the therapist login.
-
-For the credentials requested when this app was first made, use the password already specified by the site owner.
-
-Do NOT put the password in any JavaScript file.
-
-## 3. Create the database
-
-Open:
-
-SQL Editor → New query
-
-Paste the complete contents of `supabase-setup.sql`, then run it once.
-
-This creates `public.schedule_days`, enables Row Level Security, adds public read permissions, allows only the specified therapist email to edit, and enables Realtime Postgres Changes.
-
-If the final publication line says `schedule_days` is already a member of `supabase_realtime`, it can be ignored.
-
-## 4. Add your project credentials
-
-Open `supabase-config.js`.
-
-Replace:
-
-`PASTE_YOUR_SUPABASE_PROJECT_URL_HERE`
-
-and:
-
-`PASTE_YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY_HERE`
-
-You can copy these from your Supabase project API settings.
-
-Use a browser-safe publishable key / anon key. NEVER paste a `service_role` or secret key into this website.
-
-## 5. Upload/deploy
-
-Upload these files together:
-
-- index.html
-- styles.css
-- app.js
-- supabase-config.js
-
-You can host the folder with GitHub Pages, Netlify, Cloudflare Pages, or another normal static web host.
-
-## How it works
-
-Visitors:
-- See live available dates/times.
-- Do not need an account.
-- Cannot edit availability.
-
-Therapist:
-- Clicks Therapist Login.
-- Logs in with Supabase Auth.
-- Selects any calendar date.
-- Blocks the entire date OR individual hours.
-- Can add a custom time.
-- Can add a private note.
-- Clicks Save changes.
-- The changes are written to Supabase and become visible across devices.
-
-## Security
-
-The public Supabase browser key is not treated as an admin password. Security comes from Row Level Security. The included RLS policies grant public SELECT only and grant INSERT/UPDATE/DELETE only to an authenticated JWT whose email is `infocampbellweb@gmail.com`.
-
-Never use the Supabase service-role key in frontend/browser code.
-
+This version is connected to Supabase and includes the complete usability upgrade.
 
 ## Automatic business hours
 
-The latest version automatically follows these hours:
-
-- Tuesday–Friday: 09:00–17:00
-- Saturday: 09:00–15:00
+- Tuesday–Friday: 09h00–17h00
+- Saturday: 09h00–15h00
 - Sunday: Closed
 - Monday: Closed
-- South African public holidays: 09:00–15:00
+- South African public holidays: 09h00–15h00
 
-Public holiday hours override the normal Sunday/Monday closure. If a statutory public holiday falls on a Sunday, the following Monday is also treated as a public holiday.
+Available time choices use the requested pattern:
+09h00, 09h15, 09h30, 10h00, 10h15, 10h30, etc.
 
-You can still manually:
-- block an entire date;
-- block individual hours;
-- clear a date to restore the automatic business hours.
+## Therapist controls
 
-The app calculates the standard South African statutory public holidays, including Good Friday and Family Day, in the browser. One-off public holidays specially proclaimed by government would need to be added to the code if one is announced.
+- Block an entire date
+- Block individual times
+- Block the morning
+- Block the afternoon
+- Restore normal automatic hours
+- Add public Notes to a date
+- Copy one date's availability and note to another date
+- Block a date range for leave/off days
+- Clear a date back to automatic hours
+- Today button for fast navigation
+
+## Public calendar
+
+- Equal-width calendar and Available Times panels on desktop
+- Mobile-friendly stacked layout
+- Emerald = available
+- Gold = limited / public holiday accents
+- Black/grey = closed or blocked
+- Gold star = public holiday
+- Gold dot = Notes available
+- Notes display publicly when a date is selected
+- Only available times are shown
+
+## Install on a phone
+
+The app includes a web app manifest and service worker, so it can be installed as a PWA after it is hosted over HTTPS.
+
+On Android/Chrome, use the **Install App** button when it appears or Chrome's Add to Home Screen option.
+
+On iPhone/Safari, open the hosted site, tap Share, then **Add to Home Screen**.
+
+The PWA install feature does not fully work when opening `index.html` directly from the Files app. Host the app using GitHub Pages, Netlify, Cloudflare Pages, or another HTTPS host.
+
+## Supabase
+
+The existing `supabase-config.js` remains included. The app stores manual date blocks, time blocks, and Notes in the existing `schedule_days` table.
+
+The `private_note` database column is retained for compatibility, but the app now intentionally displays its contents publicly as **Notes**.
+
+## Important security note
+
+Never place a Supabase `service_role` or secret key in the browser files. Use only the publishable/anon browser key.
 
 
-## Massage by Ash visual update
+## Professional design update
 
-- `images/logo.jpg` is used in the header.
-- `images/background.png` is used as the full-page background.
-- Time choices now display in `09h00`, `09h15`, `09h30` format.
-- Tuesday-Friday use the time sequence from 09h00 through 17h00.
-- Saturday and public holidays use the sequence from 09h00 through 15h00.
-- Sundays and Mondays remain automatically closed except public holidays.
-- Manual Supabase blocks still override the automatic schedule.
+- Header logo now stands alone with no CSS-added circular border or gold ring.
+- Added WhatsApp links to 079 556 7466 using the international WhatsApp link.
+- Added direct website links to https://massagebyash.co.za.
+- Added elegant hero contact buttons and a contact footer.
+- Refined calendar typography, spacing, borders, status styling, panels, time buttons, and therapist dashboard.
+- Maintains responsive mobile layout and PWA/Supabase functionality.
 
 
-## Public Notes
+## Corrected logo/header update
 
-The therapist dashboard field is now called **Notes**. Notes saved for a date are displayed publicly when a visitor selects that date. A small gold indicator appears on calendar dates that have a note.
+- The header now uses `images/logo-transparent.png`.
+- The black logo background and original outer gold circular border have been removed.
+- The logo is displayed standalone with no CSS border, ring, background, or shadow.
+- WhatsApp and Website buttons were removed from beside Therapist Login.
+- The main-page WhatsApp and Website contact buttons remain available.
+
+
+## Reference-style redesign
+
+The public schedule has been redesigned to closely match the supplied visual reference:
+
+- Centered standalone transparent Massage by Ash logo
+- No circular logo border
+- Sign In button in the upper-right corner
+- Monday-first calendar
+- White calendar and Available Times cards
+- Dark emerald weekday/time headers
+- Gold selected / limited accents
+- Notes banner above available times
+- Horizontal Business Hours strip
+- Bottom Get In Touch area with WhatsApp and website links
+- Emerald/gold/black luxury background treatment
+- Responsive mobile layout
+
+All existing Supabase functionality, live sync, manual blocking, date-range blocking,
+public notes, automatic business hours and PWA support are retained.
