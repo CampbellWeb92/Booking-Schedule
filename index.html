@@ -163,7 +163,7 @@
   <div id="loginModal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card login-card">
       <button class="modal-close" data-close="loginModal" aria-label="Close">×</button>
-      <p class="modal-kicker">Private Access</p>
+      <p class="modal-kicker">Therapist Access</p>
       <h2>Therapist Sign In</h2>
 
       <form id="loginForm">
@@ -214,69 +214,136 @@
           <h3 id="adminSelectedDateLabel"></h3>
           <div id="autoHoursInfo" class="auto-hours-info"></div>
 
-          <label class="switch-row">
-            <span>
-              <strong>Block entire date</strong>
-              <small>No appointment times will be available.</small>
-            </span>
-            <input id="blockWholeDay" type="checkbox">
-          </label>
-
-          <div class="quick-actions">
-            <button id="blockMorningBtn" class="admin-outline" type="button">Block Morning</button>
-            <button id="blockAfternoonBtn" class="admin-outline" type="button">Block Afternoon</button>
-            <button id="restoreHoursBtn" class="admin-outline" type="button">Restore Hours</button>
+          <div class="dashboard-tabs" role="tablist" aria-label="Schedule management">
+            <button class="dashboard-tab active" type="button" data-admin-tab="day">Day</button>
+            <button class="dashboard-tab" type="button" data-admin-tab="bookings">Bookings <span id="pendingCount" class="count-badge">0</span></button>
+            <button class="dashboard-tab" type="button" data-admin-tab="settings">Settings</button>
+            <button class="dashboard-tab" type="button" data-admin-tab="history">History</button>
           </div>
 
-          <div class="admin-divider"></div>
+          <div class="admin-tab-panel" data-admin-panel="day">
+            <label class="switch-row">
+              <span><strong>Block entire date</strong><small>No appointment times will be available.</small></span>
+              <input id="blockWholeDay" type="checkbox">
+            </label>
 
-          <div class="manage-heading">
-            <strong>Block Individual Times</strong>
-            <small>Tap a time to block or unblock it.</small>
-          </div>
-          <div id="adminSlots" class="admin-slots"></div>
-
-          <div class="admin-divider"></div>
-
-          <label>Notes
-            <textarea id="dayNote" rows="3" placeholder="Add a note to display publicly for this date"></textarea>
-          </label>
-
-          <div class="admin-divider"></div>
-
-          <div class="copy-block">
-            <div class="manage-heading">
-              <strong>Copy Availability</strong>
-              <small>Copy this date's blocks and note to another date.</small>
+            <div class="quick-actions">
+              <button id="blockMorningBtn" class="admin-outline" type="button">Block Morning</button>
+              <button id="blockAfternoonBtn" class="admin-outline" type="button">Block Afternoon</button>
+              <button id="restoreHoursBtn" class="admin-outline" type="button">Restore Hours</button>
             </div>
-            <div class="copy-row">
-              <input id="copyTargetDate" type="date" aria-label="Copy to date">
-              <button id="copyDayBtn" class="admin-outline" type="button">Copy to Date</button>
-            </div>
-          </div>
 
-          <div class="admin-divider"></div>
-
-          <div class="range-block">
-            <div class="manage-heading">
-              <strong>Block a Date Range</strong>
-              <small>Useful for leave or several off days.</small>
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Custom Opening Hours</strong><small>Open a normally closed day, start later, or finish early.</small></div>
+            <label class="switch-row compact-switch">
+              <span><strong>Use custom hours for this date</strong><small>Overrides the automatic hours for this date only.</small></span>
+              <input id="useCustomHours" type="checkbox">
+            </label>
+            <div class="range-grid custom-hours-row">
+              <label>Open<input id="customOpen" type="time" step="900" value="09:00"></label>
+              <label>Close<input id="customClose" type="time" step="900" value="15:00"></label>
             </div>
+            <button id="applyCustomHoursBtn" class="admin-outline full-button" type="button">Apply Custom Hours</button>
+
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Block Individual Times</strong><small>Tap a time to block or unblock it.</small></div>
+            <div id="adminSlots" class="admin-slots"></div>
+
+            <div class="admin-divider"></div>
+            <label>Public Client Notice
+              <textarea id="dayNote" rows="3" placeholder="Example: Away today, appointments resume tomorrow."></textarea>
+            </label>
+
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Public Holiday Override</strong><small>Edit automatic holidays or create a once-off holiday.</small></div>
+            <label>Holiday handling
+              <select id="holidayMode">
+                <option value="automatic">Automatic</option>
+                <option value="holiday">Treat as public holiday</option>
+                <option value="normal">Treat as normal weekday</option>
+                <option value="closed">Closed for holiday</option>
+              </select>
+            </label>
+            <label>Holiday name <span class="optional">(when applicable)</span>
+              <input id="holidayName" type="text" placeholder="e.g. Special Public Holiday">
+            </label>
+
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Add Confirmed Booking</strong><small>Choose the client’s actual duration. The appointment itself can never finish after closing time.</small></div>
             <div class="range-grid">
-              <label>From
-                <input id="rangeStart" type="date">
+              <label>Start time<select id="bookingStart"></select></label>
+              <label>Duration
+                <select id="bookingDuration"><option value="30" selected>30 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option></select>
               </label>
-              <label>To
-                <input id="rangeEnd" type="date">
+              <label>Buffer
+                <select id="bookingBuffer"><option value="0">0 min</option><option value="15">15 min</option><option value="30">30 min</option></select>
               </label>
+              <label>Service<input id="bookingService" type="text" placeholder="Massage service"></label>
+              <label>Client name<input id="bookingClient" type="text" placeholder="Optional"></label>
+              <label>Client phone<input id="bookingPhone" type="tel" placeholder="Optional"></label>
             </div>
-            <button id="blockRangeBtn" class="admin-dark full-button" type="button">Block Date Range</button>
+            <button id="addBookingBtn" class="admin-dark full-button" type="button">Add Confirmed Booking</button>
+
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Block a Time Range</strong><small>For errands, breaks or personal time. Clients only see “Unavailable”.</small></div>
+            <div class="range-grid">
+              <label>From<select id="manualBlockStart"></select></label>
+              <label>Until<input id="manualBlockEnd" type="time" step="900"></label>
+            </div>
+            <label>Public reason <span class="optional">(optional)</span><input id="manualBlockNote" type="text" placeholder="e.g. Unavailable for a private appointment"></label>
+            <button id="addManualBlockBtn" class="admin-outline full-button" type="button">Add Time Block</button>
+
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Appointments &amp; Blocks on This Date</strong><small>Confirmed ranges reserve the full appointment plus buffer.</small></div>
+            <div id="dayAppointments" class="appointment-list"></div>
+
+            <div class="admin-divider"></div>
+            <div class="copy-block">
+              <div class="manage-heading"><strong>Copy Availability</strong><small>Copy this date's manual hours, blocks and public notice.</small></div>
+              <div class="copy-row"><input id="copyTargetDate" type="date" aria-label="Copy to date"><button id="copyDayBtn" class="admin-outline" type="button">Copy to Date</button></div>
+            </div>
+
+            <div class="admin-divider"></div>
+            <div class="range-block">
+              <div class="manage-heading"><strong>Block a Date Range</strong><small>Useful for leave, travel or several off days.</small></div>
+              <div class="range-grid"><label>From<input id="rangeStart" type="date"></label><label>To<input id="rangeEnd" type="date"></label></div>
+              <label>Public reason<textarea id="rangeNote" rows="2" placeholder="Example: Away 14–18 August. Appointments resume 19 August."></textarea></label>
+              <button id="blockRangeBtn" class="admin-dark full-button" type="button">Block Date Range</button>
+            </div>
+
+            <div class="admin-button-row">
+              <button id="clearDayBtn" class="admin-outline" type="button">Clear Date</button>
+              <button id="saveDayBtn" class="admin-primary" type="button">Save Day Changes</button>
+            </div>
           </div>
 
-          <div class="admin-button-row">
-            <button id="clearDayBtn" class="admin-outline" type="button">Clear Date</button>
-            <button id="saveDayBtn" class="admin-primary" type="button">Save Changes</button>
+          <div class="admin-tab-panel hidden" data-admin-panel="bookings">
+            <div class="manage-heading"><strong>Pending Website Requests</strong><small>Confirming a request applies your default buffer and immediately removes the range from public availability.</small></div>
+            <div id="pendingRequests" class="appointment-list"></div>
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Upcoming Confirmed Appointments</strong><small>Client details stay private in the admin dashboard.</small></div>
+            <div id="upcomingAppointments" class="appointment-list"></div>
           </div>
+
+          <div class="admin-tab-panel hidden" data-admin-panel="settings">
+            <div class="manage-heading"><strong>Booking Rules</strong><small>These rules are applied to the public website automatically.</small></div>
+            <div class="range-grid">
+              <label>Default buffer<select id="settingBuffer"><option value="0">0 min</option><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></label>
+              <label>Minimum notice<select id="settingNotice"><option value="0">No minimum</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="240">4 hours</option><option value="720">12 hours</option><option value="1440">24 hours</option></select></label>
+              <label>Advance booking<input id="settingAdvance" type="number" min="1" max="365" value="60"><small>Maximum days clients may book ahead.</small></label>
+            </div>
+            <button id="saveSettingsBtn" class="admin-primary full-button" type="button">Save Booking Rules</button>
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Administrator Access</strong><small>Database permissions now use the schedule_admins table, so additional authorised accounts can be added later without rewriting policies.</small></div>
+            <p class="admin-help">The initial administrator remains <strong>infocampbellweb@gmail.com</strong>. Add another account in Supabase Authentication first, then add its email to <code>schedule_admins</code>.</p>
+          </div>
+
+          <div class="admin-tab-panel hidden" data-admin-panel="history">
+            <div class="manage-heading"><strong>Activity History</strong><small>Recent schedule, booking, holiday and settings changes.</small></div>
+            <button id="undoDayBtn" class="admin-outline full-button" type="button">Undo Last Change for Selected Date</button>
+            <div id="historyList" class="history-list"></div>
+          </div>
+
           <p id="saveMessage" class="save-message" aria-live="polite"></p>
         </section>
       </div>
