@@ -333,6 +333,21 @@
               <label>Advance booking<input id="settingAdvance" type="number" min="1" max="365" value="60"><small>Maximum days clients may book ahead.</small></label>
             </div>
             <button id="saveSettingsBtn" class="admin-primary full-button" type="button">Save Booking Rules</button>
+
+            <div class="admin-divider"></div>
+            <div class="manage-heading"><strong>Pending Booking Alerts</strong><small>Get a branded popup and chime when a new website request arrives while this app is open. Browser/device notifications are also shown when permission is granted.</small></div>
+            <div class="alert-settings-card">
+              <div class="alert-settings-copy">
+                <strong id="alertStatusTitle">Booking alerts are off</strong>
+                <small id="alertStatusText">Enable alerts once on this device to allow notifications and the booking chime.</small>
+              </div>
+              <div class="alert-settings-actions">
+                <button id="enableAlertsBtn" class="admin-primary" type="button">Enable Booking Alerts</button>
+                <button id="toggleAlertSoundBtn" class="admin-outline" type="button">Mute Sound</button>
+                <button id="testAlertBtn" class="admin-outline" type="button">Test Alert</button>
+              </div>
+            </div>
+
             <div class="admin-divider"></div>
             <div class="manage-heading"><strong>Administrator Access</strong><small>Database permissions now use the schedule_admins table, so additional authorised accounts can be added later without rewriting policies.</small></div>
             <p class="admin-help">The initial administrator remains <strong>infocampbellweb@gmail.com</strong>. Add another account in Supabase Authentication first, then add its email to <code>schedule_admins</code>.</p>
@@ -350,8 +365,21 @@
     </div>
   </div>
 
+  <div id="bookingAlertPopup" class="booking-alert-popup hidden" role="alertdialog" aria-live="assertive" aria-labelledby="bookingAlertTitle">
+    <div class="booking-alert-icon" aria-hidden="true">🔔</div>
+    <div class="booking-alert-content">
+      <span class="booking-alert-kicker">NEW BOOKING REQUEST</span>
+      <strong id="bookingAlertTitle">Pending booking</strong>
+      <span id="bookingAlertDetails"></span>
+      <div class="booking-alert-actions">
+        <button id="viewBookingAlertBtn" class="admin-primary" type="button">View Booking</button>
+        <button id="dismissBookingAlertBtn" class="admin-outline" type="button">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

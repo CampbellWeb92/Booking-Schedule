@@ -1041,3 +1041,61 @@ input:focus,textarea:focus{
   .appointment-card{grid-template-columns:1fr}
   .status-pill{justify-self:start}
 }
+
+/* ===== Pending booking alerts ===== */
+.alert-settings-card{
+  display:grid;
+  gap:14px;
+  margin-top:12px;
+  padding:15px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:linear-gradient(135deg,#f8faf8,#fffaf0);
+}
+.alert-settings-copy{display:grid;gap:4px}
+.alert-settings-copy strong{color:var(--green-deep)}
+.alert-settings-copy small{color:var(--muted);line-height:1.5}
+.alert-settings-actions{display:flex;gap:8px;flex-wrap:wrap}
+.alert-settings-actions button{flex:1 1 150px}
+
+.booking-alert-popup{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:10000;
+  width:min(420px,calc(100vw - 28px));
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr);
+  gap:13px;
+  padding:17px;
+  border:1px solid rgba(178,139,62,.45);
+  border-radius:18px;
+  background:rgba(255,255,255,.98);
+  box-shadow:0 18px 55px rgba(6,47,37,.24);
+  backdrop-filter:blur(12px);
+  animation:bookingAlertIn .28s ease-out;
+}
+.booking-alert-popup.hidden{display:none!important}
+.booking-alert-icon{
+  width:44px;height:44px;border-radius:50%;
+  display:grid;place-items:center;
+  background:var(--gold-soft);
+  font-size:1.3rem;
+}
+.booking-alert-content{display:grid;gap:5px;min-width:0}
+.booking-alert-kicker{font-size:.68rem;letter-spacing:.12em;font-weight:800;color:var(--gold-dark,#85641f)}
+.booking-alert-content strong{font-size:1.05rem;color:var(--green-deep)}
+.booking-alert-content>span:last-of-type{font-size:.84rem;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.booking-alert-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px}
+.booking-alert-actions button{padding:8px 11px;font-size:.78rem}
+@keyframes bookingAlertIn{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
+@media(max-width:600px){
+  .booking-alert-popup{right:14px;left:14px;bottom:14px;width:auto}
+  .alert-settings-actions{display:grid;grid-template-columns:1fr}
+}
+.appointment-card.alert-highlight{
+  outline:3px solid rgba(178,139,62,.45);
+  box-shadow:0 0 0 6px rgba(178,139,62,.12);
+  animation:alertHighlight 1s ease-in-out 2;
+}
+@keyframes alertHighlight{50%{transform:translateY(-2px);box-shadow:0 8px 24px rgba(178,139,62,.2)}}

@@ -18,6 +18,15 @@ let realtimeChannels = [];
 let adminRealtimeSubscribed = false;
 let deferredInstallPrompt = null;
 
+// Pending booking alert preferences are stored per device/browser.
+let bookingAlertsEnabled = localStorage.getItem('mba_booking_alerts_enabled') === 'true';
+let bookingAlertSoundEnabled = localStorage.getItem('mba_booking_alert_sound') !== 'false';
+let bookingAlertAudio = null;
+let currentAlertAppointmentId = null;
+let bookingAlertDismissTimer = null;
+let pendingAlertOpenRequested = new URLSearchParams(location.search).get('pending') === '1';
+const alertedPendingIds = new Set();
+
 const $ = id => document.getElementById(id);
 const qsa = selector => [...document.querySelectorAll(selector)];
 
@@ -229,7 +238,9 @@ $('loginForm')?.addEventListener('submit',async e=>{
   if(error){$('loginError').textContent='Incorrect email or password.';return;}
   const user=await currentUser();
   if(!await isAuthorizedAdmin(user)){await db.auth.signOut();$('loginError').textContent='This account is not authorised for the schedule.';return;}
-  $('loginPassword').value=''; closeModal('loginModal'); openAdmin();
+  $('loginPassword').value=''; closeModal('loginModal');
+  if(pendingAlertOpenRequested){pendingAlertOpenRequested=false;await openAdmin();activateBookingsTab();}
+  else openAdmin();
 });
 $('logoutBtn')?.addEventListener('click',async()=>{await db.auth.signOut();closeModal('adminModal');});
 
@@ -244,20 +255,178 @@ async function loadHistory() {
 }
 async function refreshAdminData(render=true) {
   await Promise.all([loadAppointments(),loadHistory()]);
-  if(render) { await loadAdminDraft(); renderAdmin(); renderBookingsPanels(); renderSettings(); renderHistory(); }
-  else { renderBookingsPanels(); renderHistory(); }
+  if(render) { await loadAdminDraft(); renderAdmin(); renderBookingsPanels(); renderSettings(); renderHistory(); updateAlertSettingsUI(); }
+  else { renderBookingsPanels(); renderHistory(); updateAlertSettingsUI(); }
 }
+
+function ensureBookingAlertAudio() {
+  if (!bookingAlertAudio) {
+    bookingAlertAudio = new Audio('notification.wav');
+    bookingAlertAudio.preload = 'auto';
+    bookingAlertAudio.volume = 0.8;
+  }
+  return bookingAlertAudio;
+}
+async function playBookingAlertSound() {
+  if (!bookingAlertSoundEnabled) return;
+  try {
+    const audio=ensureBookingAlertAudio();
+    audio.currentTime=0;
+    await audio.play();
+  } catch (error) {
+    console.info('Booking alert sound requires a user interaction on this device.',error);
+  }
+}
+function notificationPermissionText() {
+  if (!('Notification' in window)) return 'Device notifications are not supported by this browser.';
+  if (Notification.permission==='granted') return 'Device notifications are allowed.';
+  if (Notification.permission==='denied') return 'Device notifications are blocked in browser settings.';
+  return 'Device notification permission has not been granted yet.';
+}
+function updateAlertSettingsUI() {
+  const title=$('alertStatusTitle'), text=$('alertStatusText'), enable=$('enableAlertsBtn'), sound=$('toggleAlertSoundBtn');
+  if (!title || !text) return;
+  if (bookingAlertsEnabled) {
+    title.textContent='Booking alerts are enabled';
+    text.textContent=`In-app pending-booking popups are on. ${bookingAlertSoundEnabled?'Chime is on.':'Chime is muted.'} ${notificationPermissionText()}`;
+    if(enable) enable.textContent='Alerts Enabled';
+  } else {
+    title.textContent='Booking alerts are off';
+    text.textContent=`Enable alerts on this device to receive pending-booking popups. ${notificationPermissionText()}`;
+    if(enable) enable.textContent='Enable Booking Alerts';
+  }
+  if(sound) sound.textContent=bookingAlertSoundEnabled?'Mute Sound':'Unmute Sound';
+}
+async function enableBookingAlerts() {
+  bookingAlertsEnabled=true;
+  localStorage.setItem('mba_booking_alerts_enabled','true');
+  if ('Notification' in window && Notification.permission==='default') {
+    try { await Notification.requestPermission(); } catch (error) { console.info(error); }
+  }
+  // This click is a user gesture, so use it to unlock the chime for browsers with autoplay protection.
+  await playBookingAlertSound();
+  updateAlertSettingsUI();
+  message('Booking alerts enabled on this device. Use Test Alert to check the popup and sound.');
+}
+function dismissBookingAlert() {
+  if(bookingAlertDismissTimer) clearTimeout(bookingAlertDismissTimer);
+  bookingAlertDismissTimer=null;
+  $('bookingAlertPopup')?.classList.add('hidden');
+}
+async function showDeviceBookingNotification(appointment, isTest=false) {
+  if (!bookingAlertsEnabled || !('Notification' in window) || Notification.permission!=='granted') return;
+  const start=String(appointment.start_time||'').slice(0,5);
+  const title=isTest?'Test Booking Alert':'New Pending Booking';
+  const body=isTest
+    ? 'Your Massage by Ash booking alerts are working.'
+    : `${appointment.client_name||'Client'} · ${prettyDate(appointment.day)} at ${formatSlot(start)}${appointment.service?` · ${appointment.service}`:''}`;
+  const options={
+    body,
+    icon:'./images/logo-clean.png',
+    badge:'./images/logo-clean.png',
+    tag:isTest?'mba-booking-alert-test':`mba-booking-${appointment.id}`,
+    renotify:true,
+    requireInteraction:!isTest,
+    data:{appointmentId:appointment.id||null,url:'./?pending=1'}
+  };
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration=await navigator.serviceWorker.ready;
+      await registration.showNotification(title,options);
+    } else {
+      new Notification(title,options);
+    }
+  } catch (error) { console.info('Device notification unavailable:',error); }
+}
+async function showPendingBookingAlert(appointment,{test=false}={}) {
+  if (!test && (!bookingAlertsEnabled || appointment?.status!=='pending')) return;
+  if (!test && appointment?.id && alertedPendingIds.has(String(appointment.id))) return;
+  if (!test && appointment?.id) alertedPendingIds.add(String(appointment.id));
+
+  currentAlertAppointmentId=appointment?.id||null;
+  const title=$('bookingAlertTitle'), details=$('bookingAlertDetails'), popup=$('bookingAlertPopup');
+  const start=String(appointment?.start_time||'09:00').slice(0,5);
+  if(title) title.textContent=test?'Test alert — everything is working':(appointment?.client_name||'New pending booking');
+  if(details) details.textContent=test
+    ? 'This is how a new pending booking will appear.'
+    : `${prettyDate(appointment.day)} at ${formatSlot(start)}${appointment.service?` · ${appointment.service}`:''}`;
+  popup?.classList.remove('hidden');
+
+  if(bookingAlertDismissTimer) clearTimeout(bookingAlertDismissTimer);
+  bookingAlertDismissTimer=setTimeout(dismissBookingAlert,test?9000:20000);
+  await playBookingAlertSound();
+  if(navigator.vibrate && !test) navigator.vibrate([160,70,160]);
+  await showDeviceBookingNotification(appointment,test);
+}
+function activateBookingsTab() {
+  qsa('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminTab==='bookings'));
+  qsa('[data-admin-panel]').forEach(p=>p.classList.toggle('hidden',p.dataset.adminPanel!=='bookings'));
+  renderBookingsPanels();
+}
+async function openPendingBookings(appointmentId=null) {
+  const user=await currentUser();
+  if(!user || !await isAuthorizedAdmin(user)) {
+    pendingAlertOpenRequested=true;
+    openModal('loginModal');
+    return;
+  }
+  if($('adminModal')?.classList.contains('hidden')) await openAdmin();
+  activateBookingsTab();
+  dismissBookingAlert();
+  const targetId=appointmentId||currentAlertAppointmentId;
+  if(targetId){
+    setTimeout(()=>{
+      const card=document.querySelector(`[data-appointment-id="${CSS.escape(String(targetId))}"]`);
+      if(card){card.classList.add('alert-highlight');card.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>card.classList.remove('alert-highlight'),2600);}
+    },60);
+  } else $('pendingRequests')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('enableAlertsBtn')?.addEventListener('click',enableBookingAlerts);
+$('toggleAlertSoundBtn')?.addEventListener('click',async()=>{
+  bookingAlertSoundEnabled=!bookingAlertSoundEnabled;
+  localStorage.setItem('mba_booking_alert_sound',String(bookingAlertSoundEnabled));
+  updateAlertSettingsUI();
+  if(bookingAlertSoundEnabled) await playBookingAlertSound();
+});
+$('testAlertBtn')?.addEventListener('click',()=>showPendingBookingAlert({id:'test',status:'pending',day:isoDate(new Date()),start_time:'09:00',service:'Test appointment',client_name:'Test client'},{test:true}));
+$('dismissBookingAlertBtn')?.addEventListener('click',dismissBookingAlert);
+$('viewBookingAlertBtn')?.addEventListener('click',()=>openPendingBookings(currentAlertAppointmentId));
+if('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message',event=>{
+  if(event.data?.type==='OPEN_PENDING_BOOKINGS') openPendingBookings(event.data.appointmentId||null);
+});
+
+document.addEventListener('pointerdown',async function primeBookingAudio(){
+  document.removeEventListener('pointerdown',primeBookingAudio);
+  if(!bookingAlertsEnabled || !bookingAlertSoundEnabled) return;
+  try{
+    const audio=ensureBookingAlertAudio(), previousVolume=audio.volume;
+    audio.volume=0;
+    await audio.play();
+    audio.pause();
+    audio.currentTime=0;
+    audio.volume=previousVolume;
+  }catch(error){console.info('Alert audio will unlock when Enable Alerts or Test Alert is used.',error);}
+},{passive:true});
 function subscribeAdminRealtime() {
   if (!db || adminRealtimeSubscribed) return;
   adminRealtimeSubscribed = true;
-  const appointmentsChannel=db.channel('admin-appointments-live').on('postgres_changes',{event:'*',schema:'public',table:'appointments'},async()=>{await loadAppointments();renderBookingsPanels();}).subscribe();
+  const appointmentsChannel=db.channel('admin-appointments-live')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'appointments'},async payload=>{
+      await loadAppointments();
+      renderBookingsPanels();
+      const appointment=payload.new;
+      if(appointment?.status==='pending') await showPendingBookingAlert(appointment);
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'appointments'},async()=>{await loadAppointments();renderBookingsPanels();})
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'appointments'},async()=>{await loadAppointments();renderBookingsPanels();})
+    .subscribe();
   const historyChannel=db.channel('admin-history-live').on('postgres_changes',{event:'*',schema:'public',table:'schedule_audit'},async()=>{await loadHistory();renderHistory();}).subscribe();
   realtimeChannels.push(appointmentsChannel,historyChannel);
 }
 async function openAdmin() {
   adminViewDate=startOfMonth(parseISODate(adminSelectedDate));
   subscribeAdminRealtime();
-  await refreshAdminData(false); await loadAdminDraft(); renderAdmin(); renderBookingsPanels(); renderSettings(); renderHistory(); openModal('adminModal');
+  await refreshAdminData(false); await loadAdminDraft(); renderAdmin(); renderBookingsPanels(); renderSettings(); renderHistory(); updateAlertSettingsUI(); openModal('adminModal');
 }
 async function loadAdminDraft() {
   const src=getDayData(adminSelectedDate);
@@ -312,7 +481,7 @@ function renderAdminBookingOptions() {
 }
 function selectedDayAppointments() { return appointments.filter(a=>a.day===adminSelectedDate && a.status!=='cancelled').sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))); }
 function appointmentCard(a, includeActions=true) {
-  const div=document.createElement('article'); div.className=`appointment-card status-${a.status}`;
+  const div=document.createElement('article'); div.className=`appointment-card status-${a.status}`; div.dataset.appointmentId=String(a.id||'');
   const end=String(a.end_time).slice(0,5), blocked=String(a.blocked_until_time).slice(0,5), start=String(a.start_time).slice(0,5);
   div.innerHTML=`<div><strong>${a.kind==='manual_block'?'Manual block':escapeHtml(a.service||'Appointment')}</strong><span>${prettyDate(a.day)} · ${formatSlot(start)}–${formatSlot(end)}${blocked!==end?` · buffer until ${formatSlot(blocked)}`:''}</span>${a.client_name?`<small>${escapeHtml(a.client_name)}${a.client_phone?` · ${escapeHtml(a.client_phone)}`:''}</small>`:''}${a.client_notes?`<small>${escapeHtml(a.client_notes)}</small>`:''}</div><span class="status-pill">${a.status}</span>`;
   if(includeActions){const row=document.createElement('div');row.className='appointment-actions';if(a.status==='pending'){row.append(actionButton('Confirm',()=>confirmAppointment(a)),actionButton('Cancel',()=>updateAppointmentStatus(a.id,'cancelled')));}else if(a.status==='confirmed'){row.append(actionButton('Complete',()=>updateAppointmentStatus(a.id,'completed')),actionButton('Cancel',()=>updateAppointmentStatus(a.id,'cancelled')));}div.appendChild(row);}return div;
@@ -381,7 +550,23 @@ if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.se
 async function init(){
   renderPublic();
   if(!configured()){$('setupBanner').classList.remove('hidden');setSync('Not configured',true);return;}
-  try{db=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);await loadPublicData();subscribeRealtime();}
+  try{
+    db=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_PUBLISHABLE_KEY);
+    await loadPublicData();
+    subscribeRealtime();
+    updateAlertSettingsUI();
+    const existingUser=await currentUser();
+    const existingAdmin=existingUser && await isAuthorizedAdmin(existingUser);
+    if(existingAdmin){
+      subscribeAdminRealtime();
+      await loadAppointments();
+      renderBookingsPanels();
+    }
+    if(pendingAlertOpenRequested){
+      if(existingAdmin){pendingAlertOpenRequested=false;await openAdmin();activateBookingsTab();}
+      else openModal('loginModal');
+    }
+  }
   catch(e){console.error(e);$('setupBanner').classList.remove('hidden');setSync('Connection error',true);}
 }
 init();
