@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#111111" />
-  <title>CampbellWeb Schedule</title>
+  <meta name="theme-color" content="#061f18" />
+  <title>Massage by Ash | Schedule</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -18,8 +18,8 @@
 
   <header class="topbar">
     <a class="brand" href="#schedule">
-      <span class="brand-mark">C</span>
-      <span><strong>CampbellWeb</strong><small>Appointment Schedule</small></span>
+      <img class="brand-logo" src="images/logo.jpg" alt="Massage by Ash logo">
+      <span><strong>Massage by Ash</strong><small>Appointment Schedule</small></span>
     </a>
     <div class="top-actions">
       <span id="syncStatus" class="sync-status">Connecting…</span>
@@ -29,9 +29,9 @@
 
   <main class="page-shell">
     <section id="schedule" class="hero">
-      <p class="eyebrow">Live availability</p>
-      <h1>Session Schedule</h1>
-      <p class="hero-copy">Choose a date to view available appointment times.</p>
+      <p class="eyebrow">Massage by Ash</p>
+      <h1>Appointment Schedule</h1>
+      <p class="hero-copy">Choose a date to view available massage appointment times.</p>
     </section>
 
     <section class="calendar-layout">
@@ -47,9 +47,9 @@
         </div>
         <div id="calendarGrid" class="calendar-grid"></div>
         <div class="legend">
-          <span><i class="dot available"></i> Available</span>
-          <span><i class="dot partial"></i> Partly blocked</span>
-          <span><i class="dot blocked"></i> Fully blocked</span>
+          <span><i class="dot available"></i> Open</span>
+          <span><i class="dot partial"></i> Some hours blocked</span>
+          <span><i class="dot blocked"></i> Closed / blocked</span>
         </div>
       </div>
 
@@ -112,6 +112,8 @@
           <p class="eyebrow">Editing</p>
           <h3 id="adminSelectedDateLabel"></h3>
 
+          <div id="autoHoursInfo" class="auto-hours-info"></div>
+
           <label class="switch-row">
             <span>
               <strong>Block entire date</strong>
@@ -123,8 +125,8 @@
           <div class="divider"></div>
 
           <div class="manage-heading">
-            <strong>Block individual hours</strong>
-            <small>Tap a time to block/unblock it.</small>
+            <strong>Block individual times</strong>
+            <small>Tap any 15- or 30-minute time option to block or unblock it.</small>
           </div>
           <div id="adminSlots" class="admin-slots"></div>
 

@@ -91,3 +91,34 @@ Therapist:
 The public Supabase browser key is not treated as an admin password. Security comes from Row Level Security. The included RLS policies grant public SELECT only and grant INSERT/UPDATE/DELETE only to an authenticated JWT whose email is `infocampbellweb@gmail.com`.
 
 Never use the Supabase service-role key in frontend/browser code.
+
+
+## Automatic business hours
+
+The latest version automatically follows these hours:
+
+- Tuesday–Friday: 09:00–17:00
+- Saturday: 09:00–15:00
+- Sunday: Closed
+- Monday: Closed
+- South African public holidays: 09:00–15:00
+
+Public holiday hours override the normal Sunday/Monday closure. If a statutory public holiday falls on a Sunday, the following Monday is also treated as a public holiday.
+
+You can still manually:
+- block an entire date;
+- block individual hours;
+- clear a date to restore the automatic business hours.
+
+The app calculates the standard South African statutory public holidays, including Good Friday and Family Day, in the browser. One-off public holidays specially proclaimed by government would need to be added to the code if one is announced.
+
+
+## Massage by Ash visual update
+
+- `images/logo.jpg` is used in the header.
+- `images/background.png` is used as the full-page background.
+- Time choices now display in `09h00`, `09h15`, `09h30` format.
+- Tuesday-Friday use the time sequence from 09h00 through 17h00.
+- Saturday and public holidays use the sequence from 09h00 through 15h00.
+- Sundays and Mondays remain automatically closed except public holidays.
+- Manual Supabase blocks still override the automatic schedule.
