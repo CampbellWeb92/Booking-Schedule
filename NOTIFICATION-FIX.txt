@@ -1,0 +1,14 @@
+MASSAGE BY ASH - BOOKING NOTIFICATION FIX
+
+What was fixed:
+- Test Alert now enables the real booking-alert setting too.
+- Supabase Realtime booking subscription reports errors and retries automatically.
+- A 15-second authenticated fallback check catches pending requests if Realtime misses an event.
+- The app checks again when it regains focus, returns from the background, or reconnects to the internet.
+- Alerted booking IDs are stored on the device to prevent duplicate alerts.
+- The WAV chime is unlocked on user interaction and has a Web Audio fallback chime.
+- Pending requests missed while the app was paused are surfaced when the app becomes active again.
+- Service-worker cache version was bumped so the corrected JavaScript replaces the old cached build.
+
+IMPORTANT:
+Browser notifications and custom in-app sound can only be generated while the web app has a running page/service context. The fallback check catches missed bookings when the app is reopened/resumed. True push notifications while the app is fully closed require a server-side Web Push sender (for example a Supabase Edge Function + Push subscription storage).

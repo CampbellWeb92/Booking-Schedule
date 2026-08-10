@@ -22,10 +22,21 @@ let deferredInstallPrompt = null;
 let bookingAlertsEnabled = localStorage.getItem('mba_booking_alerts_enabled') === 'true';
 let bookingAlertSoundEnabled = localStorage.getItem('mba_booking_alert_sound') !== 'false';
 let bookingAlertAudio = null;
+let bookingAlertAudioContext = null;
+let bookingAlertAudioUnlocked = false;
 let currentAlertAppointmentId = null;
 let bookingAlertDismissTimer = null;
+let bookingMonitorTimer = null;
+let bookingRealtimeRetryTimer = null;
+let adminAppointmentsChannel = null;
+let adminHistoryChannel = null;
 let pendingAlertOpenRequested = new URLSearchParams(location.search).get('pending') === '1';
-const alertedPendingIds = new Set();
+const ALERTED_PENDING_STORAGE_KEY = 'mba_alerted_pending_booking_ids_v2';
+const ALERTED_PENDING_MAX = 150;
+const alertedPendingIds = new Set((()=>{
+  try { return JSON.parse(localStorage.getItem(ALERTED_PENDING_STORAGE_KEY) || '[]').map(String); }
+  catch { return []; }
+})());
 
 const $ = id => document.getElementById(id);
 const qsa = selector => [...document.querySelectorAll(selector)];
@@ -242,7 +253,7 @@ $('loginForm')?.addEventListener('submit',async e=>{
   if(pendingAlertOpenRequested){pendingAlertOpenRequested=false;await openAdmin();activateBookingsTab();}
   else openAdmin();
 });
-$('logoutBtn')?.addEventListener('click',async()=>{await db.auth.signOut();closeModal('adminModal');});
+$('logoutBtn')?.addEventListener('click',async()=>{stopBookingMonitor();adminRealtimeSubscribed=false;await removeAdminRealtimeChannels();await db.auth.signOut();closeModal('adminModal');});
 
 async function loadAppointments() {
   const {data,error}=await db.from('appointments').select('*').order('day',{ascending:true}).order('start_time',{ascending:true});
@@ -259,60 +270,144 @@ async function refreshAdminData(render=true) {
   else { renderBookingsPanels(); renderHistory(); updateAlertSettingsUI(); }
 }
 
+function rememberAlertedPendingId(id) {
+  if (!id) return;
+  alertedPendingIds.add(String(id));
+  try {
+    const values=[...alertedPendingIds].slice(-ALERTED_PENDING_MAX);
+    localStorage.setItem(ALERTED_PENDING_STORAGE_KEY,JSON.stringify(values));
+  } catch (error) { console.info('Could not persist alerted booking IDs:',error); }
+}
+
 function ensureBookingAlertAudio() {
   if (!bookingAlertAudio) {
-    bookingAlertAudio = new Audio('notification.wav');
+    bookingAlertAudio = new Audio(new URL('notification.wav', location.href).href);
     bookingAlertAudio.preload = 'auto';
-    bookingAlertAudio.volume = 0.8;
+    bookingAlertAudio.volume = 0.9;
+    bookingAlertAudio.setAttribute('playsinline','');
   }
   return bookingAlertAudio;
 }
+
+function ensureBookingAudioContext() {
+  if (!bookingAlertAudioContext) {
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if (AudioCtx) bookingAlertAudioContext=new AudioCtx();
+  }
+  return bookingAlertAudioContext;
+}
+
+async function unlockBookingAlertAudio() {
+  if (!bookingAlertSoundEnabled) return;
+  try {
+    const audio=ensureBookingAlertAudio();
+    const previousVolume=audio.volume;
+    audio.volume=0;
+    audio.currentTime=0;
+    await audio.play();
+    audio.pause();
+    audio.currentTime=0;
+    audio.volume=previousVolume;
+    bookingAlertAudioUnlocked=true;
+  } catch (error) {
+    console.info('HTML audio unlock was deferred:',error);
+  }
+  try {
+    const ctx=ensureBookingAudioContext();
+    if (ctx?.state==='suspended') await ctx.resume();
+    if (ctx?.state==='running') bookingAlertAudioUnlocked=true;
+  } catch (error) {
+    console.info('Web Audio unlock was deferred:',error);
+  }
+}
+
+async function playFallbackBookingChime() {
+  try {
+    const ctx=ensureBookingAudioContext();
+    if (!ctx) return false;
+    if (ctx.state==='suspended') await ctx.resume();
+    if (ctx.state!=='running') return false;
+    const now=ctx.currentTime;
+    const gain=ctx.createGain();
+    gain.gain.setValueAtTime(0.0001,now);
+    gain.gain.exponentialRampToValueAtTime(0.22,now+0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001,now+0.65);
+    gain.connect(ctx.destination);
+    [[660,0],[880,0.16],[1046,0.34]].forEach(([frequency,delay])=>{
+      const osc=ctx.createOscillator();
+      osc.type='sine';
+      osc.frequency.setValueAtTime(frequency,now+delay);
+      osc.connect(gain);
+      osc.start(now+delay);
+      osc.stop(now+delay+0.28);
+    });
+    return true;
+  } catch (error) {
+    console.info('Fallback booking chime unavailable:',error);
+    return false;
+  }
+}
+
 async function playBookingAlertSound() {
   if (!bookingAlertSoundEnabled) return;
   try {
     const audio=ensureBookingAlertAudio();
+    audio.pause();
     audio.currentTime=0;
+    audio.volume=0.9;
     await audio.play();
+    bookingAlertAudioUnlocked=true;
+    return;
   } catch (error) {
-    console.info('Booking alert sound requires a user interaction on this device.',error);
+    console.info('WAV booking chime could not play; trying fallback chime.',error);
   }
+  await playFallbackBookingChime();
 }
+
 function notificationPermissionText() {
   if (!('Notification' in window)) return 'Device notifications are not supported by this browser.';
   if (Notification.permission==='granted') return 'Device notifications are allowed.';
   if (Notification.permission==='denied') return 'Device notifications are blocked in browser settings.';
   return 'Device notification permission has not been granted yet.';
 }
+
 function updateAlertSettingsUI() {
   const title=$('alertStatusTitle'), text=$('alertStatusText'), enable=$('enableAlertsBtn'), sound=$('toggleAlertSoundBtn');
   if (!title || !text) return;
   if (bookingAlertsEnabled) {
     title.textContent='Booking alerts are enabled';
-    text.textContent=`In-app pending-booking popups are on. ${bookingAlertSoundEnabled?'Chime is on.':'Chime is muted.'} ${notificationPermissionText()}`;
+    text.textContent=`Live booking checks are on. ${bookingAlertSoundEnabled?'Chime is on.':'Chime is muted.'} ${notificationPermissionText()}`;
     if(enable) enable.textContent='Alerts Enabled';
   } else {
     title.textContent='Booking alerts are off';
-    text.textContent=`Enable alerts on this device to receive pending-booking popups. ${notificationPermissionText()}`;
+    text.textContent=`Enable alerts on this device to receive real pending-booking notifications. ${notificationPermissionText()}`;
     if(enable) enable.textContent='Enable Booking Alerts';
   }
   if(sound) sound.textContent=bookingAlertSoundEnabled?'Mute Sound':'Unmute Sound';
 }
-async function enableBookingAlerts() {
+
+async function enableBookingAlerts({playConfirmation=true,scanNow=true}={}) {
   bookingAlertsEnabled=true;
   localStorage.setItem('mba_booking_alerts_enabled','true');
   if ('Notification' in window && Notification.permission==='default') {
     try { await Notification.requestPermission(); } catch (error) { console.info(error); }
   }
-  // This click is a user gesture, so use it to unlock the chime for browsers with autoplay protection.
-  await playBookingAlertSound();
+  // This function is called from a click/tap. Unlock both audio paths here so
+  // a later Realtime/polling callback can play the same chime without a gesture.
+  await unlockBookingAlertAudio();
+  if (playConfirmation) await playBookingAlertSound();
   updateAlertSettingsUI();
-  message('Booking alerts enabled on this device. Use Test Alert to check the popup and sound.');
+  startBookingMonitor();
+  if (scanNow) await scanForPendingBookingAlerts({includeExisting:true});
+  message('Booking alerts are enabled. New website requests will be checked live and by fallback polling.');
 }
+
 function dismissBookingAlert() {
   if(bookingAlertDismissTimer) clearTimeout(bookingAlertDismissTimer);
   bookingAlertDismissTimer=null;
   $('bookingAlertPopup')?.classList.add('hidden');
 }
+
 async function showDeviceBookingNotification(appointment, isTest=false) {
   if (!bookingAlertsEnabled || !('Notification' in window) || Notification.permission!=='granted') return;
   const start=String(appointment.start_time||'').slice(0,5);
@@ -327,42 +422,48 @@ async function showDeviceBookingNotification(appointment, isTest=false) {
     tag:isTest?'mba-booking-alert-test':`mba-booking-${appointment.id}`,
     renotify:true,
     requireInteraction:!isTest,
+    silent:false,
+    timestamp:Date.now(),
     data:{appointmentId:appointment.id||null,url:'./?pending=1'}
   };
   try {
     if ('serviceWorker' in navigator) {
-      const registration=await navigator.serviceWorker.ready;
+      let registration=await navigator.serviceWorker.getRegistration();
+      if (!registration) registration=await navigator.serviceWorker.ready;
       await registration.showNotification(title,options);
     } else {
       new Notification(title,options);
     }
   } catch (error) { console.info('Device notification unavailable:',error); }
 }
+
 async function showPendingBookingAlert(appointment,{test=false}={}) {
-  if (!test && (!bookingAlertsEnabled || appointment?.status!=='pending')) return;
+  if (!test && (!bookingAlertsEnabled || appointment?.status!=='pending' || appointment?.kind==='manual_block')) return;
   if (!test && appointment?.id && alertedPendingIds.has(String(appointment.id))) return;
-  if (!test && appointment?.id) alertedPendingIds.add(String(appointment.id));
+  if (!test && appointment?.id) rememberAlertedPendingId(appointment.id);
 
   currentAlertAppointmentId=appointment?.id||null;
   const title=$('bookingAlertTitle'), details=$('bookingAlertDetails'), popup=$('bookingAlertPopup');
   const start=String(appointment?.start_time||'09:00').slice(0,5);
   if(title) title.textContent=test?'Test alert — everything is working':(appointment?.client_name||'New pending booking');
   if(details) details.textContent=test
-    ? 'This is how a new pending booking will appear.'
+    ? 'This test also enables real booking alerts on this device.'
     : `${prettyDate(appointment.day)} at ${formatSlot(start)}${appointment.service?` · ${appointment.service}`:''}`;
   popup?.classList.remove('hidden');
 
   if(bookingAlertDismissTimer) clearTimeout(bookingAlertDismissTimer);
-  bookingAlertDismissTimer=setTimeout(dismissBookingAlert,test?9000:20000);
+  bookingAlertDismissTimer=setTimeout(dismissBookingAlert,test?9000:25000);
   await playBookingAlertSound();
-  if(navigator.vibrate && !test) navigator.vibrate([160,70,160]);
+  if(navigator.vibrate && !test) navigator.vibrate([180,80,180,80,260]);
   await showDeviceBookingNotification(appointment,test);
 }
+
 function activateBookingsTab() {
   qsa('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminTab==='bookings'));
   qsa('[data-admin-panel]').forEach(p=>p.classList.toggle('hidden',p.dataset.adminPanel!=='bookings'));
   renderBookingsPanels();
 }
+
 async function openPendingBookings(appointmentId=null) {
   const user=await currentUser();
   if(!user || !await isAuthorizedAdmin(user)) {
@@ -381,52 +482,150 @@ async function openPendingBookings(appointmentId=null) {
     },60);
   } else $('pendingRequests')?.scrollIntoView({behavior:'smooth',block:'start'});
 }
-$('enableAlertsBtn')?.addEventListener('click',enableBookingAlerts);
+
+async function scanForPendingBookingAlerts({includeExisting=false}={}) {
+  if (!db || !bookingAlertsEnabled) return;
+  // Use the locally persisted session here; the appointments RLS policy remains
+  // the authority for whether this device may read pending requests.
+  const {data:sessionData}=await db.auth.getSession();
+  if (!sessionData?.session?.user) return;
+  const {data,error}=await db.from('appointments')
+    .select('id,day,start_time,end_time,status,kind,service,client_name,client_phone,source,created_at')
+    .eq('status','pending')
+    .eq('kind','booking')
+    .order('created_at',{ascending:true});
+  if (error) {
+    console.info('Pending booking fallback check failed:',error);
+    return;
+  }
+  const unseen=(data||[]).filter(a=>a.id && !alertedPendingIds.has(String(a.id)));
+  if (!unseen.length) return;
+  // When alerts are explicitly enabled/tested, includeExisting=true ensures a
+  // pending request that Realtime already missed is surfaced immediately.
+  const alerts=includeExisting ? unseen : unseen;
+  for (const appointment of alerts) await showPendingBookingAlert(appointment);
+  await loadAppointments();
+  renderBookingsPanels();
+}
+
+function stopBookingMonitor() {
+  if (bookingMonitorTimer) clearInterval(bookingMonitorTimer);
+  bookingMonitorTimer=null;
+}
+
+function startBookingMonitor() {
+  stopBookingMonitor();
+  if (!bookingAlertsEnabled) return;
+  bookingMonitorTimer=setInterval(()=>scanForPendingBookingAlerts(),15000);
+}
+
+function scheduleRealtimeRetry() {
+  if (bookingRealtimeRetryTimer) return;
+  bookingRealtimeRetryTimer=setTimeout(()=>{
+    bookingRealtimeRetryTimer=null;
+    adminRealtimeSubscribed=false;
+    subscribeAdminRealtime();
+    scanForPendingBookingAlerts();
+  },5000);
+}
+
+async function removeAdminRealtimeChannels() {
+  const channels=[adminAppointmentsChannel,adminHistoryChannel].filter(Boolean);
+  adminAppointmentsChannel=null;
+  adminHistoryChannel=null;
+  for (const channel of channels) {
+    try { await db?.removeChannel(channel); } catch (error) { console.info(error); }
+  }
+}
+
+async function subscribeAdminRealtime() {
+  if (!db || adminRealtimeSubscribed) return;
+  const user=await currentUser();
+  if (!user || !await isAuthorizedAdmin(user)) return;
+
+  await removeAdminRealtimeChannels();
+
+  adminAppointmentsChannel=db.channel(`admin-appointments-live-${Date.now()}`)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'appointments'},async payload=>{
+      await loadAppointments();
+      renderBookingsPanels();
+      const appointment=payload.new;
+      if(appointment?.status==='pending' && appointment?.kind!=='manual_block') await showPendingBookingAlert(appointment);
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'appointments'},async payload=>{
+      await loadAppointments();
+      renderBookingsPanels();
+      if(payload.new?.status==='pending' && payload.old?.status!=='pending' && payload.new?.kind!=='manual_block') {
+        await showPendingBookingAlert(payload.new);
+      }
+    })
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'appointments'},async()=>{
+      await loadAppointments();
+      renderBookingsPanels();
+    })
+    .subscribe((status,error)=>{
+      console.info('Booking Realtime status:',status,error||'');
+      if(status==='SUBSCRIBED'){
+        adminRealtimeSubscribed=true;
+        if(bookingRealtimeRetryTimer){clearTimeout(bookingRealtimeRetryTimer);bookingRealtimeRetryTimer=null;}
+        scanForPendingBookingAlerts();
+      } else if(status==='CHANNEL_ERROR' || status==='TIMED_OUT' || status==='CLOSED'){
+        adminRealtimeSubscribed=false;
+        scheduleRealtimeRetry();
+      }
+    });
+
+  adminHistoryChannel=db.channel(`admin-history-live-${Date.now()}`)
+    .on('postgres_changes',{event:'*',schema:'public',table:'schedule_audit'},async()=>{await loadHistory();renderHistory();})
+    .subscribe((status,error)=>{
+      if(status==='CHANNEL_ERROR' || status==='TIMED_OUT') console.info('History Realtime status:',status,error||'');
+    });
+
+  realtimeChannels.push(adminAppointmentsChannel,adminHistoryChannel);
+  startBookingMonitor();
+}
+
+$('enableAlertsBtn')?.addEventListener('click',()=>enableBookingAlerts());
 $('toggleAlertSoundBtn')?.addEventListener('click',async()=>{
   bookingAlertSoundEnabled=!bookingAlertSoundEnabled;
   localStorage.setItem('mba_booking_alert_sound',String(bookingAlertSoundEnabled));
   updateAlertSettingsUI();
-  if(bookingAlertSoundEnabled) await playBookingAlertSound();
+  if(bookingAlertSoundEnabled){await unlockBookingAlertAudio();await playBookingAlertSound();}
 });
-$('testAlertBtn')?.addEventListener('click',()=>showPendingBookingAlert({id:'test',status:'pending',day:isoDate(new Date()),start_time:'09:00',service:'Test appointment',client_name:'Test client'},{test:true}));
+$('testAlertBtn')?.addEventListener('click',async()=>{
+  // A successful test must mean REAL alerts are enabled too. The old build
+  // allowed the test popup/sound to work while real alerts were still off.
+  if(!bookingAlertsEnabled) await enableBookingAlerts({playConfirmation:false,scanNow:false});
+  else await unlockBookingAlertAudio();
+  await showPendingBookingAlert({id:'test',status:'pending',kind:'booking',day:isoDate(new Date()),start_time:'09:00',service:'Test appointment',client_name:'Test client'},{test:true});
+  await scanForPendingBookingAlerts({includeExisting:true});
+});
 $('dismissBookingAlertBtn')?.addEventListener('click',dismissBookingAlert);
 $('viewBookingAlertBtn')?.addEventListener('click',()=>openPendingBookings(currentAlertAppointmentId));
 if('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message',event=>{
   if(event.data?.type==='OPEN_PENDING_BOOKINGS') openPendingBookings(event.data.appointmentId||null);
 });
 
+// Prime audio on the first interaction anywhere in the installed app/page.
 document.addEventListener('pointerdown',async function primeBookingAudio(){
   document.removeEventListener('pointerdown',primeBookingAudio);
   if(!bookingAlertsEnabled || !bookingAlertSoundEnabled) return;
-  try{
-    const audio=ensureBookingAlertAudio(), previousVolume=audio.volume;
-    audio.volume=0;
-    await audio.play();
-    audio.pause();
-    audio.currentTime=0;
-    audio.volume=previousVolume;
-  }catch(error){console.info('Alert audio will unlock when Enable Alerts or Test Alert is used.',error);}
+  await unlockBookingAlertAudio();
 },{passive:true});
-function subscribeAdminRealtime() {
-  if (!db || adminRealtimeSubscribed) return;
-  adminRealtimeSubscribed = true;
-  const appointmentsChannel=db.channel('admin-appointments-live')
-    .on('postgres_changes',{event:'INSERT',schema:'public',table:'appointments'},async payload=>{
-      await loadAppointments();
-      renderBookingsPanels();
-      const appointment=payload.new;
-      if(appointment?.status==='pending') await showPendingBookingAlert(appointment);
-    })
-    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'appointments'},async()=>{await loadAppointments();renderBookingsPanels();})
-    .on('postgres_changes',{event:'DELETE',schema:'public',table:'appointments'},async()=>{await loadAppointments();renderBookingsPanels();})
-    .subscribe();
-  const historyChannel=db.channel('admin-history-live').on('postgres_changes',{event:'*',schema:'public',table:'schedule_audit'},async()=>{await loadHistory();renderHistory();}).subscribe();
-  realtimeChannels.push(appointmentsChannel,historyChannel);
-}
+
+// Recheck after the app returns from the background or reconnects. This catches
+// requests received while a mobile browser/PWA paused its WebSocket.
+window.addEventListener('focus',()=>{ if(bookingAlertsEnabled){subscribeAdminRealtime();scanForPendingBookingAlerts();} });
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && bookingAlertsEnabled){subscribeAdminRealtime();scanForPendingBookingAlerts();}
+});
+window.addEventListener('online',()=>{ if(bookingAlertsEnabled){adminRealtimeSubscribed=false;subscribeAdminRealtime();scanForPendingBookingAlerts();} });
 async function openAdmin() {
   adminViewDate=startOfMonth(parseISODate(adminSelectedDate));
-  subscribeAdminRealtime();
+  await subscribeAdminRealtime();
+  if(bookingAlertsEnabled) startBookingMonitor();
   await refreshAdminData(false); await loadAdminDraft(); renderAdmin(); renderBookingsPanels(); renderSettings(); renderHistory(); updateAlertSettingsUI(); openModal('adminModal');
+  if(bookingAlertsEnabled) scanForPendingBookingAlerts();
 }
 async function loadAdminDraft() {
   const src=getDayData(adminSelectedDate);
@@ -558,10 +757,32 @@ async function init(){
     const existingUser=await currentUser();
     const existingAdmin=existingUser && await isAuthorizedAdmin(existingUser);
     if(existingAdmin){
-      subscribeAdminRealtime();
       await loadAppointments();
       renderBookingsPanels();
+      await subscribeAdminRealtime();
+      if(bookingAlertsEnabled){
+        startBookingMonitor();
+        await unlockBookingAlertAudio();
+        await scanForPendingBookingAlerts({includeExisting:true});
+      }
     }
+
+    db.auth.onAuthStateChange(async(event,session)=>{
+      if(event==='SIGNED_OUT'){
+        stopBookingMonitor();
+        adminRealtimeSubscribed=false;
+        await removeAdminRealtimeChannels();
+        return;
+      }
+      if(session?.user && (event==='SIGNED_IN' || event==='TOKEN_REFRESHED' || event==='INITIAL_SESSION')){
+        if(await isAuthorizedAdmin(session.user)){
+          if(event==='TOKEN_REFRESHED') adminRealtimeSubscribed=false;
+          await subscribeAdminRealtime();
+          if(bookingAlertsEnabled){startBookingMonitor();scanForPendingBookingAlerts();}
+        }
+      }
+    });
+
     if(pendingAlertOpenRequested){
       if(existingAdmin){pendingAlertOpenRequested=false;await openAdmin();activateBookingsTab();}
       else openModal('loginModal');

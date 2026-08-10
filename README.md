@@ -97,3 +97,13 @@ The public schedule has been redesigned to closely match the supplied visual ref
 
 All existing Supabase functionality, live sync, manual blocking, date-range blocking,
 public notes, automatic business hours and PWA support are retained.
+
+
+## Booking notification reliability fix
+
+- Test Alert now enables real booking alerts too.
+- Realtime subscription failures automatically retry.
+- Authenticated fallback checking runs every 15 seconds while alerts are enabled.
+- Focus, visibility and online events trigger an immediate catch-up check.
+- Sound uses the bundled WAV first and a Web Audio fallback chime if needed.
+- Service worker cache is now v10 to force installed phones to receive the corrected app files.
