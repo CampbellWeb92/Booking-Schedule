@@ -458,12 +458,6 @@ async function showPendingBookingAlert(appointment,{test=false}={}) {
   await showDeviceBookingNotification(appointment,test);
 }
 
-function activateBookingsTab() {
-  qsa('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminTab==='bookings'));
-  qsa('[data-admin-panel]').forEach(p=>p.classList.toggle('hidden',p.dataset.adminPanel!=='bookings'));
-  renderBookingsPanels();
-}
-
 async function openPendingBookings(appointmentId=null) {
   const user=await currentUser();
   if(!user || !await isAuthorizedAdmin(user)) {
@@ -651,6 +645,8 @@ function renderAdmin() {
   const h=holidayOverrides[adminSelectedDate];
   $('holidayMode').value=h?.mode||'automatic'; $('holidayName').value=h?.name||automaticHolidayFor(adminSelectedDate)?.name||'';
   renderAdminSlotsOnly(); renderAdminBookingOptions(); renderDayAppointments();
+  if($('addBookingDate')) $('addBookingDate').value=adminSelectedDate;
+  updateDashboardSummary();
 }
 function editableSlotsForDraft() {
   if(adminDraft.customSlots?.length) return adminDraft.customSlots;
@@ -678,27 +674,149 @@ function renderAdminBookingOptions() {
   }
   if(manualSel){const prev=manualSel.value;manualSel.innerHTML='<option value="">Choose time</option>';starts.forEach(t=>{if(!slotIsBlocked(adminSelectedDate,t)){const o=document.createElement('option');o.value=t;o.textContent=formatSlot(t);manualSel.appendChild(o);}});if([...manualSel.options].some(o=>o.value===prev))manualSel.value=prev;}
 }
-function selectedDayAppointments() { return appointments.filter(a=>a.day===adminSelectedDate && a.status!=='cancelled').sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))); }
-function appointmentCard(a, includeActions=true) {
-  const div=document.createElement('article'); div.className=`appointment-card status-${a.status}`; div.dataset.appointmentId=String(a.id||'');
-  const end=String(a.end_time).slice(0,5), blocked=String(a.blocked_until_time).slice(0,5), start=String(a.start_time).slice(0,5);
-  div.innerHTML=`<div><strong>${a.kind==='manual_block'?'Manual block':escapeHtml(a.service||'Appointment')}</strong><span>${prettyDate(a.day)} · ${formatSlot(start)}–${formatSlot(end)}${blocked!==end?` · buffer until ${formatSlot(blocked)}`:''}</span>${a.client_name?`<small>${escapeHtml(a.client_name)}${a.client_phone?` · ${escapeHtml(a.client_phone)}`:''}</small>`:''}${a.client_notes?`<small>${escapeHtml(a.client_notes)}</small>`:''}</div><span class="status-pill">${a.status}</span>`;
-  if(includeActions){const row=document.createElement('div');row.className='appointment-actions';if(a.status==='pending'){row.append(actionButton('Confirm',()=>confirmAppointment(a)),actionButton('Cancel',()=>updateAppointmentStatus(a.id,'cancelled')));}else if(a.status==='confirmed'){row.append(actionButton('Complete',()=>updateAppointmentStatus(a.id,'completed')),actionButton('Cancel',()=>updateAppointmentStatus(a.id,'cancelled')));}div.appendChild(row);}return div;
+function normalizeClientKey(a) {
+  const phone=String(a.client_phone||'').replace(/\D/g,'');
+  if(phone) return `phone:${phone}`;
+  const name=String(a.client_name||'').trim().toLowerCase();
+  return name ? `name:${name}` : '';
 }
-function actionButton(text,fn){const b=document.createElement('button');b.type='button';b.className='admin-outline small-action';b.textContent=text;b.onclick=fn;return b;}
+function appointmentSearchText(a) {
+  return [a.client_name,a.client_phone,a.service,a.day,a.status,a.client_notes].filter(Boolean).join(' ').toLowerCase();
+}
+function filteredBookingAppointments(rows) {
+  const query=String($('bookingSearch')?.value||'').trim().toLowerCase();
+  const status=$('bookingStatusFilter')?.value||'all';
+  return rows.filter(a=>{
+    if(a.kind!=='booking') return false;
+    if(status!=='all' && a.status!==status) return false;
+    if(query && !appointmentSearchText(a).includes(query)) return false;
+    return true;
+  });
+}
+function statusLabel(status) {
+  return ({pending:'Pending',confirmed:'Confirmed',completed:'Completed',cancelled:'Cancelled'})[status]||status;
+}
+function appointmentCard(a, includeActions=true) {
+  const div=document.createElement('article');
+  div.className=`appointment-card status-${a.status}${a.status==='pending'?' pending-emphasis':''}`;
+  div.dataset.appointmentId=String(a.id||'');
+  const end=String(a.end_time).slice(0,5), blocked=String(a.blocked_until_time).slice(0,5), start=String(a.start_time).slice(0,5);
+  const kindTitle=a.kind==='manual_block'?'Manual block':escapeHtml(a.service||'Appointment');
+  const main=document.createElement('div');
+  main.className='appointment-main';
+  main.innerHTML=`<strong class="appointment-service">${kindTitle}</strong><span class="appointment-time">${prettyDate(a.day)} · ${formatSlot(start)}–${formatSlot(end)}${blocked!==end?` · protected until ${formatSlot(blocked)}`:''}</span>`;
+  if(a.client_name){
+    const clientRow=document.createElement('div');clientRow.className='client-row';
+    const key=normalizeClientKey(a);
+    if(key){
+      const clientButton=document.createElement('button');clientButton.type='button';clientButton.className='client-history-link';clientButton.textContent=a.client_name;clientButton.title='View client history';clientButton.addEventListener('click',()=>openClientHistory(a));clientRow.appendChild(clientButton);
+    } else {
+      const span=document.createElement('span');span.textContent=a.client_name;clientRow.appendChild(span);
+    }
+    if(a.client_phone){const phone=document.createElement('small');phone.textContent=` · ${a.client_phone}`;clientRow.appendChild(phone);}
+    main.appendChild(clientRow);
+  }
+  if(a.client_notes){const notes=document.createElement('small');notes.className='appointment-client-notes';notes.textContent=a.client_notes;main.appendChild(notes);}
+  div.appendChild(main);
+  const pill=document.createElement('span');pill.className='status-pill';pill.textContent=statusLabel(a.status);div.appendChild(pill);
+
+  if(includeActions){
+    const row=document.createElement('div');row.className='appointment-actions';
+    if(a.status==='pending'){
+      row.append(actionButton('Confirm',()=>confirmAppointment(a),'confirm-action'),actionButton('Cancel',()=>updateAppointmentStatus(a.id,'cancelled'),'danger-action'));
+    } else if(a.status==='confirmed'){
+      row.append(actionButton('Mark Completed',()=>updateAppointmentStatus(a.id,'completed'),'complete-action'),actionButton('Cancel',()=>updateAppointmentStatus(a.id,'cancelled'),'danger-action'));
+    }
+    if(row.children.length) div.appendChild(row);
+  }
+  return div;
+}
+function actionButton(text,fn,extraClass=''){
+  const b=document.createElement('button');b.type='button';b.className=`admin-outline small-action ${extraClass}`.trim();b.textContent=text;b.onclick=fn;return b;
+}
 function escapeHtml(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-function renderDayAppointments(){const w=$('dayAppointments');if(!w)return;w.innerHTML='';const rows=selectedDayAppointments();if(!rows.length){w.innerHTML='<div class="empty-state compact">No bookings or time blocks on this date.</div>';return;}rows.forEach(a=>w.appendChild(appointmentCard(a)));}
+function selectedDayAppointments() { return appointments.filter(a=>a.day===adminSelectedDate && a.status!=='cancelled').sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))); }
+function renderDayAppointments(){
+  const w=$('dayAppointments');if(!w)return;w.innerHTML='';const rows=selectedDayAppointments();
+  if(!rows.length){w.innerHTML='<div class="empty-state compact">No bookings or time blocks on this date.</div>';return;}
+  rows.forEach(a=>w.appendChild(appointmentCard(a)));
+}
+function fillAppointmentList(id,rows,emptyText,includeActions=true){
+  const wrap=$(id);if(!wrap)return;wrap.innerHTML='';
+  if(!rows.length){wrap.innerHTML=`<div class="empty-state compact">${emptyText}</div>`;return;}
+  rows.forEach(a=>wrap.appendChild(appointmentCard(a,includeActions)));
+}
+function updateDashboardSummary(){
+  const today=isoDate(new Date());
+  const todayConfirmed=appointments.filter(a=>a.kind==='booking'&&a.status==='confirmed'&&a.day===today).sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time)));
+  const pending=appointments.filter(a=>a.kind==='booking'&&a.status==='pending');
+  const now=new Date();
+  const upcoming=appointments.filter(a=>a.kind==='booking'&&a.status==='confirmed'&&(`${a.day}T${String(a.start_time).slice(0,5)}`)>=`${today}T${pad(now.getHours())}:${pad(now.getMinutes())}`).sort((a,b)=>`${a.day}${a.start_time}`.localeCompare(`${b.day}${b.start_time}`));
+  if($('summaryTodayBookings')) $('summaryTodayBookings').textContent=String(todayConfirmed.length);
+  if($('summaryPendingBookings')) $('summaryPendingBookings').textContent=String(pending.length);
+  if($('summaryNextBooking')) $('summaryNextBooking').textContent=upcoming.length?formatSlot(String(upcoming[0].start_time).slice(0,5)):'—';
+  if($('summaryNextBookingMeta')) $('summaryNextBookingMeta').textContent=upcoming.length?`${upcoming[0].day===today?'Today':prettyDate(upcoming[0].day)} · ${upcoming[0].client_name||upcoming[0].service||'Appointment'}`:'No upcoming booking';
+  if($('summarySelectedDate')) $('summarySelectedDate').textContent=adminSelectedDate===today?'Today':prettyDate(adminSelectedDate);
+  if($('summarySelectedStatus')) $('summarySelectedStatus').textContent=baseAvailabilityForDay(adminSelectedDate).label||'Schedule';
+  if($('mobilePendingCount')){$('mobilePendingCount').textContent=String(pending.length);$('mobilePendingCount').classList.toggle('hidden',pending.length===0);}
+}
 function renderBookingsPanels(){
-  const pending=$('pendingRequests'), upcoming=$('upcomingAppointments'); if(!pending||!upcoming)return;
-  const pend=appointments.filter(a=>a.status==='pending').sort((a,b)=>`${a.day}${a.start_time}`.localeCompare(`${b.day}${b.start_time}`));
-  $('pendingCount').textContent=String(pend.length); pending.innerHTML=''; upcoming.innerHTML='';
-  if(!pend.length) pending.innerHTML='<div class="empty-state compact">No pending website requests.</div>'; else pend.forEach(a=>pending.appendChild(appointmentCard(a)));
-  const today=isoDate(new Date()), conf=appointments.filter(a=>a.status==='confirmed'&&a.day>=today).sort((a,b)=>`${a.day}${a.start_time}`.localeCompare(`${b.day}${b.start_time}`));
-  if(!conf.length) upcoming.innerHTML='<div class="empty-state compact">No upcoming confirmed appointments.</div>'; else conf.forEach(a=>upcoming.appendChild(appointmentCard(a)));
+  const today=isoDate(new Date());
+  const rows=filteredBookingAppointments(appointments);
+  const pending=rows.filter(a=>a.status==='pending').sort((a,b)=>`${a.day}${a.start_time}`.localeCompare(`${b.day}${b.start_time}`));
+  const todayRows=rows.filter(a=>a.status==='confirmed'&&a.day===today).sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time)));
+  const upcoming=rows.filter(a=>a.status==='confirmed'&&a.day>today).sort((a,b)=>`${a.day}${a.start_time}`.localeCompare(`${b.day}${b.start_time}`));
+  const overdue=rows.filter(a=>a.status==='confirmed'&&a.day<today).sort((a,b)=>`${a.day}${a.start_time}`.localeCompare(`${b.day}${b.start_time}`));
+  const completed=rows.filter(a=>a.status==='completed').sort((a,b)=>`${b.day}${b.start_time}`.localeCompare(`${a.day}${a.start_time}`));
+  const cancelled=rows.filter(a=>a.status==='cancelled').sort((a,b)=>`${b.day}${b.start_time}`.localeCompare(`${a.day}${a.start_time}`));
+
+  const allPending=appointments.filter(a=>a.kind==='booking'&&a.status==='pending');
+  if($('pendingCount')) $('pendingCount').textContent=String(allPending.length);
+  if($('pendingSectionCount')) $('pendingSectionCount').textContent=String(pending.length);
+  if($('todaySectionCount')) $('todaySectionCount').textContent=String(todayRows.length);
+  if($('upcomingSectionCount')) $('upcomingSectionCount').textContent=String(upcoming.length);
+  if($('overdueSectionCount')) $('overdueSectionCount').textContent=String(overdue.length);
+  if($('completedCount')) $('completedCount').textContent=String(completed.length);
+  if($('cancelledCount')) $('cancelledCount').textContent=String(cancelled.length);
+
+  fillAppointmentList('pendingRequests',pending,'No pending website requests.');
+  fillAppointmentList('todayAppointments',todayRows,'No confirmed appointments today.');
+  fillAppointmentList('upcomingAppointments',upcoming,'No upcoming confirmed appointments.');
+  fillAppointmentList('overdueAppointments',overdue,'No past confirmed appointments need attention.');
+  fillAppointmentList('completedAppointments',completed,'No completed bookings match this filter.',false);
+  fillAppointmentList('cancelledAppointments',cancelled,'No cancelled bookings match this filter.',false);
   renderDayAppointments();
+  updateDashboardSummary();
 }
 function renderSettings(){if(!$('settingBuffer'))return;$('settingBuffer').value=String(settings.defaultBufferMinutes);$('settingNotice').value=String(settings.minNoticeMinutes);$('settingAdvance').value=String(settings.maxAdvanceDays);$('bookingBuffer').value=String(settings.defaultBufferMinutes);}
-function renderHistory(){const w=$('historyList');if(!w)return;w.innerHTML='';if(!historyRows.length){w.innerHTML='<div class="empty-state compact">No activity recorded yet.</div>';return;}historyRows.forEach(r=>{const el=document.createElement('article');el.className='history-item';const when=new Date(r.changed_at).toLocaleString('en-ZA',{dateStyle:'medium',timeStyle:'short'});el.innerHTML=`<strong>${escapeHtml(r.action)} · ${escapeHtml(r.table_name)}</strong><span>${escapeHtml(r.record_key)} · ${when}</span><small>${escapeHtml(r.actor_email||'system')}</small>`;w.appendChild(el);});}
+function renderHistory(){
+  const w=$('historyList');if(!w)return;w.innerHTML='';
+  const query=String($('historySearch')?.value||'').trim().toLowerCase();
+  const rows=historyRows.filter(r=>!query||[r.action,r.table_name,r.record_key,r.actor_email,r.changed_at].filter(Boolean).join(' ').toLowerCase().includes(query));
+  if(!rows.length){w.innerHTML='<div class="empty-state compact">No matching activity found.</div>';return;}
+  rows.forEach(r=>{const el=document.createElement('article');el.className='history-item';const when=new Date(r.changed_at).toLocaleString('en-ZA',{dateStyle:'medium',timeStyle:'short'});el.innerHTML=`<strong>${escapeHtml(r.action)} · ${escapeHtml(r.table_name)}</strong><span>${escapeHtml(r.record_key)} · ${when}</span><small>${escapeHtml(r.actor_email||'system')}</small>`;w.appendChild(el);});
+}
+function openClientHistory(sourceAppointment){
+  const key=normalizeClientKey(sourceAppointment);if(!key)return;
+  const rows=appointments.filter(a=>a.kind==='booking'&&normalizeClientKey(a)===key).sort((a,b)=>`${b.day}${b.start_time}`.localeCompare(`${a.day}${a.start_time}`));
+  const title=$('clientHistoryTitle'),meta=$('clientHistoryMeta'),list=$('clientHistoryList');
+  if(title) title.textContent=sourceAppointment.client_name||sourceAppointment.client_phone||'Client';
+  if(meta){const completed=rows.filter(a=>a.status==='completed').length;meta.textContent=`${rows.length} appointment${rows.length===1?'':'s'} · ${completed} completed${sourceAppointment.client_phone?` · ${sourceAppointment.client_phone}`:''}`;}
+  if(list){list.innerHTML='';rows.forEach(a=>list.appendChild(appointmentCard(a,false)));}
+  openModal('clientHistoryModal');
+}
+function switchAdminTab(tab){
+  qsa('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminTab===tab));
+  qsa('[data-mobile-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.mobileAdminTab===tab));
+  qsa('[data-admin-panel]').forEach(p=>p.classList.toggle('hidden',p.dataset.adminPanel!==tab));
+  if(tab==='bookings')renderBookingsPanels();
+  if(tab==='history')renderHistory();
+  if(tab==='add'){
+    if($('addBookingDate')) $('addBookingDate').value=adminSelectedDate;
+    renderAdminBookingOptions();
+  }
+}
+function activateBookingsTab(){switchAdminTab('bookings');}
 
 $('blockWholeDay')?.addEventListener('change',e=>{adminDraft.wholeDay=e.target.checked;renderAdminSlotsOnly();});
 $('dayNote')?.addEventListener('input',e=>adminDraft.note=e.target.value);
@@ -719,19 +837,34 @@ $('blockRangeBtn')?.addEventListener('click',async()=>{const s=$('rangeStart').v
 
 function getDayCloseMinutes(key){const slots=allSlotsForDay(key);return slots.length?timeToMinutes(slots.at(-1)):0;}
 function rangeConflicts(key,start,end){const sm=timeToMinutes(start),em=timeToMinutes(end);if(getDayData(key).wholeDay)return true;return (getDayData(key).blockedSlots||[]).some(t=>{const m=timeToMinutes(t);return m>=sm&&m<em;})||getBlocks(key).some(b=>sm<timeToMinutes(b.endTime)&&em>timeToMinutes(b.startTime));}
-$('addBookingBtn')?.addEventListener('click',async()=>{const start=$('bookingStart').value,duration=Number($('bookingDuration').value),buffer=Number($('bookingBuffer').value),close=getDayCloseMinutes(adminSelectedDate);if(!start){message('Choose a start time.',true);return;}const endM=timeToMinutes(start)+duration,blockEnd=endM+buffer;if(endM>close){message('This client appointment would finish after closing time. Choose an earlier start or a shorter duration.',true);return;}const end=minutesToTime(endM),blockedUntil=minutesToTime(blockEnd);if(rangeConflicts(adminSelectedDate,start,blockedUntil)){message('That range overlaps an existing booking or block.',true);return;}const {error}=await db.from('appointments').insert({day:adminSelectedDate,start_time:start,end_time:end,blocked_until_time:blockedUntil,duration_minutes:duration,buffer_minutes:buffer,kind:'booking',status:'confirmed',service:$('bookingService').value.trim()||'Appointment',client_name:$('bookingClient').value.trim(),client_phone:$('bookingPhone').value.trim(),client_type:'',client_notes:'',public_note:'',source:'admin'});if(error){console.error(error);message(error.message?.includes('appointments_no_confirmed_overlap')?'That time overlaps another confirmed range.':'Could not add booking.',true);return;}await loadPublicData();await loadAppointments();renderBookingsPanels();renderAdminBookingOptions();message('Confirmed booking added and public availability updated.');});
+$('addBookingBtn')?.addEventListener('click',async()=>{const start=$('bookingStart').value,duration=Number($('bookingDuration').value),buffer=Number($('bookingBuffer').value),close=getDayCloseMinutes(adminSelectedDate);if(!start){message('Choose a start time.',true);return;}const endM=timeToMinutes(start)+duration,blockEnd=endM+buffer;if(endM>close){message('This client appointment would finish after closing time. Choose an earlier start or a shorter duration.',true);return;}const end=minutesToTime(endM),blockedUntil=minutesToTime(blockEnd);if(rangeConflicts(adminSelectedDate,start,blockedUntil)){message('That range overlaps an existing booking or block.',true);return;}const {error}=await db.from('appointments').insert({day:adminSelectedDate,start_time:start,end_time:end,blocked_until_time:blockedUntil,duration_minutes:duration,buffer_minutes:buffer,kind:'booking',status:'confirmed',service:$('bookingService').value.trim()||'Appointment',client_name:$('bookingClient').value.trim(),client_phone:$('bookingPhone').value.trim(),client_type:'',client_notes:'',public_note:'',source:'admin'});if(error){console.error(error);message(error.message?.includes('appointments_no_confirmed_overlap')?'That time overlaps an existing confirmed or completed booking.':'Could not add booking.',true);return;}await loadPublicData();await loadAppointments();renderBookingsPanels();renderAdminBookingOptions();if($('bookingClient'))$('bookingClient').value='';if($('bookingPhone'))$('bookingPhone').value='';message('Confirmed booking added and public availability updated.');switchAdminTab('bookings');});
 $('addManualBlockBtn')?.addEventListener('click',async()=>{const start=$('manualBlockStart').value,end=$('manualBlockEnd').value,note=$('manualBlockNote').value.trim();if(!start||!end||timeToMinutes(end)<=timeToMinutes(start)){message('Choose a valid start and end time.',true);return;}if(rangeConflicts(adminSelectedDate,start,end)){message('That block overlaps an existing booking or block.',true);return;}const duration=timeToMinutes(end)-timeToMinutes(start);const {error}=await db.from('appointments').insert({day:adminSelectedDate,start_time:start,end_time:end,blocked_until_time:end,duration_minutes:duration,buffer_minutes:0,kind:'manual_block',status:'confirmed',service:'Manual block',client_name:'',client_phone:'',client_type:'',client_notes:'',public_note:note,source:'admin'});if(error){message('Could not add time block.',true);return;}await loadPublicData();await loadAppointments();renderBookingsPanels();renderAdminBookingOptions();message('Time range blocked.');});
 $('bookingDuration')?.addEventListener('change',renderAdminBookingOptions);
 $('bookingBuffer')?.addEventListener('change',renderAdminBookingOptions);
 $('manualBlockStart')?.addEventListener('change',()=>{if(!$('manualBlockStart').value)return;$('manualBlockEnd').value=minutesToTime(timeToMinutes($('manualBlockStart').value)+30);});
 
-async function confirmAppointment(a){const buffer=settings.defaultBufferMinutes,endM=timeToMinutes(String(a.end_time).slice(0,5)),blockedUntil=minutesToTime(endM+buffer),close=getDayCloseMinutes(a.day);if(endM>close){message('This client appointment would finish after closing time and cannot be confirmed.',true);return;}const start=String(a.start_time).slice(0,5);if(rangeConflicts(a.day,start,blockedUntil)){message('Cannot confirm: that time now overlaps a confirmed booking or block.',true);return;}const {error}=await db.from('appointments').update({status:'confirmed',buffer_minutes:buffer,blocked_until_time:blockedUntil}).eq('id',a.id);if(error){console.error(error);message('Could not confirm this request.',true);return;}await loadPublicData();await loadAppointments();renderBookingsPanels();message('Booking confirmed. The website availability changed immediately.');}
+async function confirmAppointment(a){const buffer=settings.defaultBufferMinutes,endM=timeToMinutes(String(a.end_time).slice(0,5)),blockedUntil=minutesToTime(endM+buffer),close=getDayCloseMinutes(a.day);if(endM>close){message('This client appointment would finish after closing time and cannot be confirmed.',true);return;}const start=String(a.start_time).slice(0,5);if(rangeConflicts(a.day,start,blockedUntil)){message('Cannot confirm: that time overlaps an existing confirmed/completed booking or block.',true);return;}const {error}=await db.from('appointments').update({status:'confirmed',buffer_minutes:buffer,blocked_until_time:blockedUntil}).eq('id',a.id);if(error){console.error(error);message('Could not confirm this request.',true);return;}await loadPublicData();await loadAppointments();renderBookingsPanels();message('Booking confirmed. The website availability changed immediately.');}
 async function updateAppointmentStatus(id,status){const {error}=await db.from('appointments').update({status}).eq('id',id);if(error){message('Could not update appointment.',true);return;}await loadPublicData();await loadAppointments();renderBookingsPanels();message(`Appointment marked ${status}.`);}
 
 $('saveSettingsBtn')?.addEventListener('click',async()=>{const payload={default_buffer_minutes:Number($('settingBuffer').value),min_notice_minutes:Number($('settingNotice').value),max_advance_days:Number($('settingAdvance').value)};const {error}=await db.from('schedule_settings').update(payload).eq('id',1);if(error){message('Could not save booking rules.',true);return;}settings={defaultBufferMinutes:payload.default_buffer_minutes,minNoticeMinutes:payload.min_notice_minutes,maxAdvanceDays:payload.max_advance_days};renderSettings();message('Booking rules saved and published to the website.');});
 $('undoDayBtn')?.addEventListener('click',async()=>{const {data,error}=await db.rpc('undo_last_schedule_day_change',{p_day:adminSelectedDate});if(error){message('Could not undo the last day change.',true);return;}await loadPublicData();await loadHistory();await loadAdminDraft();renderAdmin();renderHistory();message(data||'Previous state restored.');});
 
-qsa('[data-admin-tab]').forEach(btn=>btn.addEventListener('click',()=>{qsa('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b===btn));qsa('[data-admin-panel]').forEach(p=>p.classList.toggle('hidden',p.dataset.adminPanel!==btn.dataset.adminTab));if(btn.dataset.adminTab==='history')renderHistory();if(btn.dataset.adminTab==='bookings')renderBookingsPanels();}));
+qsa('[data-admin-tab]').forEach(btn=>btn.addEventListener('click',()=>switchAdminTab(btn.dataset.adminTab)));
+qsa('[data-mobile-admin-tab]').forEach(btn=>btn.addEventListener('click',()=>switchAdminTab(btn.dataset.mobileAdminTab)));
+qsa('[data-go-admin-tab]').forEach(btn=>btn.addEventListener('click',()=>switchAdminTab(btn.dataset.goAdminTab)));
+$('bookingSearch')?.addEventListener('input',renderBookingsPanels);
+$('bookingStatusFilter')?.addEventListener('change',()=>{
+  const status=$('bookingStatusFilter').value;
+  if(status==='completed') $('completedBookingsGroup')?.setAttribute('open','');
+  if(status==='cancelled') $('cancelledBookingsGroup')?.setAttribute('open','');
+  renderBookingsPanels();
+});
+$('historySearch')?.addEventListener('input',renderHistory);
+$('addBookingDate')?.addEventListener('change',async e=>{
+  if(!e.target.value)return;
+  adminSelectedDate=e.target.value;adminViewDate=startOfMonth(parseISODate(adminSelectedDate));
+  await loadAdminDraft();renderAdmin();switchAdminTab('add');
+});
 
 $('prevMonth')?.addEventListener('click',()=>{viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()-1,1);renderPublic();});
 $('nextMonth')?.addEventListener('click',()=>{viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()+1,1);renderPublic();});

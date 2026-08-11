@@ -320,7 +320,7 @@ begin
       exclude using gist (
         day with =,
         tsrange(day + start_time, day + blocked_until_time, '[)') with &&
-      ) where (status = 'confirmed');
+      ) where (status in ('confirmed','completed'));
   end if;
 end $$;
 
@@ -354,7 +354,7 @@ begin
     return old;
   end if;
 
-  if new.status = 'confirmed' then
+  if new.status in ('confirmed','completed') then
     insert into public.public_schedule_blocks(appointment_id, day, start_time, end_time, kind, public_note, updated_at)
     values (new.id, new.day, new.start_time, new.blocked_until_time, new.kind, coalesce(new.public_note, ''), now())
     on conflict (appointment_id) do update set
@@ -379,7 +379,7 @@ for each row execute function public.mirror_appointment_public_block();
 insert into public.public_schedule_blocks(appointment_id, day, start_time, end_time, kind, public_note, updated_at)
 select id, day, start_time, blocked_until_time, kind, public_note, now()
 from public.appointments
-where status = 'confirmed'
+where status in ('confirmed','completed')
 on conflict (appointment_id) do update set
   day = excluded.day,
   start_time = excluded.start_time,

@@ -107,3 +107,26 @@ public notes, automatic business hours and PWA support are retained.
 - Focus, visibility and online events trigger an immediate catch-up check.
 - Sound uses the bundled WAV first and a Web Audio fallback chime if needed.
 - Service worker cache is now v10 to force installed phones to receive the corrected app files.
+\n\n## Completed bookings remain blocked\n\nThis build changes booking availability so **Completed** appointments remain blocked on the public schedule, just like Confirmed appointments. Cancelled bookings are still released.\n\nFor an existing Supabase project, run `KEEP-COMPLETED-BOOKINGS-BLOCKED.sql` once in the Supabase SQL Editor. It updates the mirror trigger, overlap protection, and backfills bookings that were already completed.\n
+## Dashboard navigation upgrade (August 2026)
+
+The therapist dashboard has been reorganised for faster phone use:
+
+- **Today at a glance** shows today's confirmed count, pending requests, the next booking, and selected-date status.
+- **Calendar** keeps the common actions visible: Block Entire Day, Block Morning, Block Afternoon, Restore Hours and Add Booking.
+- Less-used controls are now under **Advanced Options**: custom hours, individual time blocking, public notices, holiday overrides, time-range blocks, copying availability and leave/date-range blocking.
+- **Bookings** is divided into Pending Requests, Today, Upcoming, Past Confirmed, Completed and Cancelled.
+- Completed and Cancelled history groups are collapsed by default to keep the dashboard tidy.
+- Booking cards are colour-coded by status and pending requests have larger Confirm/Cancel controls.
+- Booking search supports client name, phone number, service and date, with a status filter for Pending/Confirmed/Completed/Cancelled.
+- Tap a client's name to open their **Client History** without exposing it publicly.
+- **Add Booking** has its own uncluttered page and date picker.
+- Notification controls remain under **Settings**.
+- Mobile has a bottom navigation bar for Calendar, Bookings, Add and Settings.
+- Activity History has its own search field.
+
+### Completed bookings remain blocked
+
+Confirmed **and Completed** appointments continue to reserve their original appointment range plus buffer. Only a **Cancelled** booking releases that time.
+
+For an existing Supabase project, run `KEEP-COMPLETED-BOOKINGS-BLOCKED.sql` (or `RUN-THIS-ONCE-COMPLETED-BLOCKS.sql`) once in **Supabase → SQL Editor**. The fresh-install `supabase-setup.sql` and full `SUPABASE-UPGRADE.sql` also include this rule.

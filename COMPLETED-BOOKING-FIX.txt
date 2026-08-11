@@ -1,0 +1,9 @@
+COMPLETED BOOKING AVAILABILITY FIX
+
+1. Upload/replace the app files with this build.
+2. In Supabase -> SQL Editor, run KEEP-COMPLETED-BOOKINGS-BLOCKED.sql once.
+3. Completed bookings will then continue blocking their original appointment + buffer time.
+4. Cancelled bookings will release their time.
+
+Why the SQL step is required:
+The public calendar reads a sanitized public_schedule_blocks table. Previously the database kept rows there only for status=confirmed. The patch changes that to confirmed OR completed and backfills completed appointments.
