@@ -145,3 +145,21 @@ This version adds:
 - South African local numbers beginning with `0` are automatically converted to `27...` for WhatsApp links.
 - The mobile dashboard navigation is now **fixed directly to the bottom of the screen**.
 - Extra bottom padding is reserved inside the dashboard so the final Settings/History/booking controls remain fully readable above the fixed navigation.
+
+
+## Today-first layout redesign
+
+- Dashboard now opens on **Today** instead of Calendar.
+- Today includes pending requests, today's confirmed bookings and the next three upcoming appointments.
+- Desktop Today view uses a two-column layout with appointments on the left and a compact calendar/quick navigation on the right.
+- Mobile navigation is simplified to **Today / Calendar / Bookings / More**.
+- A floating emerald **+ Add Booking** button sits above the bottom navigation on mobile.
+- Mobile calendar cells are more compact to leave more space for appointments.
+- Booking cards now emphasise the appointment time, client and service while keeping status compact.
+- **Edit / Cancel / Delete / Client History** are grouped under a `⋯` menu so everyday cards are less cluttered.
+- Pending cards keep large Confirm/Decline actions. Confirmed cards keep Complete and WhatsApp actions visible.
+- Completed and cancelled history remains collapsed by default.
+- Selected-day controls are tucked inside a **Manage Day** drawer; Advanced Options remains available for custom hours, leave and holidays.
+- **More** groups Booking Rules, Notifications, Business Hours/Availability, Activity History and Administrator Access into expandable sections.
+- Client History now includes a concise visit summary with the most recent past visit.
+- Extra bottom spacing ensures the fixed mobile navigation and floating Add button never cover the final controls.

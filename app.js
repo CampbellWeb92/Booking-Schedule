@@ -32,6 +32,7 @@ let adminAppointmentsChannel = null;
 let adminHistoryChannel = null;
 let pendingAlertOpenRequested = new URLSearchParams(location.search).get('pending') === '1';
 let editingAppointmentId = null;
+let todayMiniViewDate = startOfMonth(new Date());
 const ALERTED_PENDING_STORAGE_KEY = 'mba_alerted_pending_booking_ids_v2';
 const ALERTED_PENDING_MAX = 150;
 const alertedPendingIds = new Set((()=>{
@@ -617,9 +618,11 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('online',()=>{ if(bookingAlertsEnabled){adminRealtimeSubscribed=false;subscribeAdminRealtime();scanForPendingBookingAlerts();} });
 async function openAdmin() {
   adminViewDate=startOfMonth(parseISODate(adminSelectedDate));
+  todayMiniViewDate=startOfMonth(new Date());
   await subscribeAdminRealtime();
   if(bookingAlertsEnabled) startBookingMonitor();
   await refreshAdminData(false); await loadAdminDraft(); renderAdmin(); renderBookingsPanels(); renderSettings(); renderHistory(); updateAlertSettingsUI(); openModal('adminModal');
+  switchAdminTab('today');
   if(bookingAlertsEnabled) scanForPendingBookingAlerts();
 }
 async function loadAdminDraft() {
@@ -754,62 +757,80 @@ function appendClientDetails(main,a) {
 
   main.appendChild(clientRow);
 }
+function appointmentMenuButton(text,fn,extraClass=''){
+  const b=document.createElement('button');
+  b.type='button';
+  b.className=`appointment-menu-item ${extraClass}`.trim();
+  b.textContent=text;
+  b.addEventListener('click',e=>{e.preventDefault();const details=b.closest('details');if(details)details.open=false;fn();});
+  return b;
+}
+function whatsappActionLink(a,label='WhatsApp'){
+  const url=whatsappUrlForPhone(a.client_phone);
+  if(!url)return null;
+  const link=document.createElement('a');
+  link.className='booking-whatsapp-action';
+  link.href=url;link.target='_blank';link.rel='noopener';link.textContent=label;
+  return link;
+}
 function appointmentCard(a, includeActions=true) {
   const div=document.createElement('article');
   div.className=`appointment-card status-${a.status}${a.status==='pending'?' pending-emphasis':''}`;
   div.dataset.appointmentId=String(a.id||'');
 
+  const start=String(a.start_time||'').slice(0,5);
   const end=String(a.end_time||'').slice(0,5);
   const blocked=String(a.blocked_until_time||a.end_time||'').slice(0,5);
-  const start=String(a.start_time||'').slice(0,5);
-  const kindTitle=a.kind==='manual_block'?'Manual block':escapeHtml(a.service||'Appointment');
+
+  const timeBlock=document.createElement('div');
+  timeBlock.className='appointment-time-block';
+  timeBlock.innerHTML=`<strong>${formatSlot(start)}</strong><span>${formatSlot(end)}</span>`;
+  div.appendChild(timeBlock);
 
   const main=document.createElement('div');
   main.className='appointment-main';
-  main.innerHTML=`<strong class="appointment-service">${kindTitle}</strong><span class="appointment-time">${prettyDate(a.day)} · ${formatSlot(start)}–${formatSlot(end)}${blocked && blocked!==end?` · protected until ${formatSlot(blocked)}`:''}</span>`;
+  const service=document.createElement('strong');
+  service.className='appointment-service';
+  service.textContent=a.kind==='manual_block'?'Manual block':(a.service||'Appointment');
+  main.appendChild(service);
 
+  const meta=document.createElement('span');
+  meta.className='appointment-time';
+  meta.textContent=`${prettyDate(a.day)}${blocked&&blocked!==end?` · protected until ${formatSlot(blocked)}`:''}`;
+  main.appendChild(meta);
   appendClientDetails(main,a);
 
   if(a.client_notes){
-    const notes=document.createElement('small');
-    notes.className='appointment-client-notes';
-    notes.textContent=a.client_notes;
-    main.appendChild(notes);
+    const notes=document.createElement('small');notes.className='appointment-client-notes';notes.textContent=a.client_notes;main.appendChild(notes);
   }
-
   div.appendChild(main);
 
-  const pill=document.createElement('span');
-  pill.className='status-pill';
-  pill.textContent=statusLabel(a.status);
-  div.appendChild(pill);
+  const pill=document.createElement('span');pill.className='status-pill';pill.textContent=statusLabel(a.status);div.appendChild(pill);
 
   if(includeActions){
-    const row=document.createElement('div');
-    row.className='appointment-actions';
+    const row=document.createElement('div');row.className='appointment-actions';
 
     if(a.status==='pending'){
-      row.append(
-        actionButton('Confirm',()=>confirmAppointment(a),'confirm-action'),
-        actionButton('Cancel',()=>updateAppointmentStatus(a.id,'cancelled'),'danger-action')
-      );
-    } else if(a.status==='confirmed'){
-      row.append(
-        actionButton('Mark Completed',()=>updateAppointmentStatus(a.id,'completed'),'complete-action'),
-        actionButton('Cancel',()=>updateAppointmentStatus(a.id,'cancelled'),'danger-action')
-      );
+      row.append(actionButton('Confirm',()=>confirmAppointment(a),'confirm-action'),actionButton('Decline',()=>updateAppointmentStatus(a.id,'cancelled'),'danger-action'));
+    }else if(a.status==='confirmed'){
+      row.append(actionButton('Complete',()=>updateAppointmentStatus(a.id,'completed'),'complete-action'));
+      const wa=whatsappActionLink(a);if(wa)row.appendChild(wa);
+    }else{
+      const wa=whatsappActionLink(a);if(wa)row.appendChild(wa);
     }
 
     if(a.kind==='booking'){
-      row.append(
-        actionButton('Edit',()=>openEditBooking(a),'edit-action'),
-        actionButton('Delete',()=>deleteBooking(a),'delete-action')
-      );
+      const menu=document.createElement('details');menu.className='appointment-menu';
+      const summary=document.createElement('summary');summary.setAttribute('aria-label','More booking actions');summary.textContent='⋯';menu.appendChild(summary);
+      const items=document.createElement('div');items.className='appointment-menu-popover';
+      items.appendChild(appointmentMenuButton('Edit Booking',()=>openEditBooking(a),'edit-menu-action'));
+      if(a.status==='confirmed'||a.status==='pending')items.appendChild(appointmentMenuButton('Cancel Booking',()=>updateAppointmentStatus(a.id,'cancelled'),'cancel-menu-action'));
+      if(normalizeClientKey(a))items.appendChild(appointmentMenuButton('View Client History',()=>openClientHistory(a)));
+      items.appendChild(appointmentMenuButton('Delete Booking',()=>deleteBooking(a),'delete-menu-action'));
+      menu.appendChild(items);row.appendChild(menu);
     }
-
-    if(row.children.length) div.appendChild(row);
+    if(row.children.length)div.appendChild(row);
   }
-
   return div;
 }
 function actionButton(text,fn,extraClass=''){
@@ -841,6 +862,34 @@ function updateDashboardSummary(){
   if($('summarySelectedStatus')) $('summarySelectedStatus').textContent=baseAvailabilityForDay(adminSelectedDate).label||'Schedule';
   if($('mobilePendingCount')){$('mobilePendingCount').textContent=String(pending.length);$('mobilePendingCount').classList.toggle('hidden',pending.length===0);}
 }
+function fillDashboardList(id,rows,emptyText,limit=0){
+  const wrap=$(id);if(!wrap)return;wrap.innerHTML='';
+  const display=limit?rows.slice(0,limit):rows;
+  if(!display.length){wrap.innerHTML=`<div class="empty-state compact">${emptyText}</div>`;return;}
+  display.forEach(a=>{const card=appointmentCard(a,true);card.classList.add('dashboard-compact-card');wrap.appendChild(card);});
+}
+function renderTodayMiniCalendar(){
+  if(!$('todayMiniCalendarGrid'))return;
+  renderCalendar('todayMiniCalendarGrid','todayMiniMonthLabel',todayMiniViewDate,adminSelectedDate,async key=>{
+    adminSelectedDate=key;adminViewDate=startOfMonth(parseISODate(key));todayMiniViewDate=startOfMonth(parseISODate(key));
+    await loadAdminDraft();renderAdmin();renderTodayDashboard();switchAdminTab('day');
+  });
+}
+function renderTodayDashboard(){
+  if(!$('todayMainAppointments'))return;
+  const today=isoDate(new Date());
+  const pending=appointments.filter(a=>a.kind==='booking'&&a.status==='pending').sort((a,b)=>`${a.day}${a.start_time}`.localeCompare(`${b.day}${b.start_time}`));
+  const todayRows=appointments.filter(a=>a.kind==='booking'&&a.status==='confirmed'&&a.day===today).sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time)));
+  const future=appointments.filter(a=>a.kind==='booking'&&a.status==='confirmed'&&a.day>today).sort((a,b)=>`${a.day}${a.start_time}`.localeCompare(`${b.day}${b.start_time}`));
+  if($('todayDashboardDate'))$('todayDashboardDate').textContent=new Date().toLocaleDateString('en-ZA',{weekday:'long',day:'numeric',month:'long'});
+  if($('todayDashboardSummary'))$('todayDashboardSummary').textContent=`${todayRows.length} booking${todayRows.length===1?'':'s'} today · ${pending.length} pending · ${future.length?`next future booking ${prettyDate(future[0].day)}`:'no future bookings'}`;
+  if($('todayPendingCount'))$('todayPendingCount').textContent=String(pending.length);
+  if($('todayMainCount'))$('todayMainCount').textContent=String(todayRows.length);
+  fillDashboardList('todayPendingRequests',pending,'No pending requests.',3);
+  fillDashboardList('todayMainAppointments',todayRows,'No confirmed appointments today.');
+  fillDashboardList('todayUpcomingPreview',future,'No upcoming bookings.',3);
+  renderTodayMiniCalendar();
+}
 function renderBookingsPanels(){
   const today=isoDate(new Date());
   const rows=filteredBookingAppointments(appointments);
@@ -868,6 +917,7 @@ function renderBookingsPanels(){
   fillAppointmentList('cancelledAppointments',cancelled,'No cancelled bookings match this filter.',true);
   renderDayAppointments();
   updateDashboardSummary();
+  renderTodayDashboard();
 }
 function renderSettings(){if(!$('settingBuffer'))return;$('settingBuffer').value=String(settings.defaultBufferMinutes);$('settingNotice').value=String(settings.minNoticeMinutes);$('settingAdvance').value=String(settings.maxAdvanceDays);$('bookingBuffer').value=String(settings.defaultBufferMinutes);}
 function renderHistory(){
@@ -888,7 +938,9 @@ function openClientHistory(sourceAppointment){
     const completed=rows.filter(a=>a.status==='completed').length;
     meta.innerHTML='';
     const summary=document.createElement('span');
-    summary.textContent=`${rows.length} appointment${rows.length===1?'':'s'} · ${completed} completed`;
+    const pastRows=rows.filter(a=>a.day<=isoDate(new Date()));
+    const lastVisit=pastRows.length?pastRows[0]:null;
+    summary.textContent=`${rows.length} visit${rows.length===1?'':'s'} · ${completed} completed${lastVisit?` · Last visit ${prettyDate(lastVisit.day)}`:''}`;
     meta.appendChild(summary);
 
     if(sourceAppointment.client_phone){
@@ -914,11 +966,13 @@ function openClientHistory(sourceAppointment){
   openModal('clientHistoryModal');
 }
 function switchAdminTab(tab){
+  if(tab==='settings'||tab==='history')tab='more';
   qsa('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminTab===tab));
   qsa('[data-mobile-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.mobileAdminTab===tab));
   qsa('[data-admin-panel]').forEach(p=>p.classList.toggle('hidden',p.dataset.adminPanel!==tab));
+  if(tab==='today')renderTodayDashboard();
   if(tab==='bookings')renderBookingsPanels();
-  if(tab==='history')renderHistory();
+  if(tab==='more'){renderSettings();renderHistory();updateAlertSettingsUI();}
   if(tab==='add'){
     if($('addBookingDate')) $('addBookingDate').value=adminSelectedDate;
     renderAdminBookingOptions();
@@ -1169,6 +1223,10 @@ $('addBookingDate')?.addEventListener('change',async e=>{
   await loadAdminDraft();renderAdmin();switchAdminTab('add');
 });
 
+$('floatingAddBookingBtn')?.addEventListener('click',()=>switchAdminTab('add'));
+$('todayOpenSelectedDate')?.addEventListener('click',()=>switchAdminTab('day'));
+$('todayMiniPrev')?.addEventListener('click',()=>{todayMiniViewDate=new Date(todayMiniViewDate.getFullYear(),todayMiniViewDate.getMonth()-1,1);renderTodayMiniCalendar();});
+$('todayMiniNext')?.addEventListener('click',()=>{todayMiniViewDate=new Date(todayMiniViewDate.getFullYear(),todayMiniViewDate.getMonth()+1,1);renderTodayMiniCalendar();});
 $('prevMonth')?.addEventListener('click',()=>{viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()-1,1);renderPublic();});
 $('nextMonth')?.addEventListener('click',()=>{viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()+1,1);renderPublic();});
 $('todayBtn')?.addEventListener('click',()=>{const t=new Date();selectedDate=isoDate(t);viewDate=startOfMonth(t);renderPublic();});

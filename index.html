@@ -202,14 +202,74 @@
       </section>
 
       <nav class="dashboard-tabs desktop-dashboard-tabs" aria-label="Schedule management">
-        <button class="dashboard-tab active" type="button" data-admin-tab="day">Calendar</button>
+        <button class="dashboard-tab active" type="button" data-admin-tab="today">Today</button>
+        <button class="dashboard-tab" type="button" data-admin-tab="day">Calendar</button>
         <button class="dashboard-tab" type="button" data-admin-tab="bookings">Bookings <span id="pendingCount" class="count-badge">0</span></button>
-        <button class="dashboard-tab" type="button" data-admin-tab="add">Add Booking</button>
-        <button class="dashboard-tab" type="button" data-admin-tab="settings">Settings</button>
-        <button class="dashboard-tab" type="button" data-admin-tab="history">History</button>
+        <button class="dashboard-tab" type="button" data-admin-tab="more">More</button>
       </nav>
 
-      <div class="admin-tab-panel" data-admin-panel="day">
+
+      <div class="admin-tab-panel" data-admin-panel="today">
+        <div class="today-dashboard-layout">
+          <section class="today-primary-column">
+            <div class="today-section-header">
+              <div>
+                <p class="modal-kicker">Today</p>
+                <h3 id="todayDashboardDate">Today</h3>
+                <p id="todayDashboardSummary" class="today-dashboard-summary">Your daily appointment overview.</p>
+              </div>
+              <button class="admin-primary compact-primary" type="button" data-go-admin-tab="add">＋ Add Booking</button>
+            </div>
+
+            <section class="today-urgent-card">
+              <div class="booking-section-heading">
+                <div><strong>Pending Requests</strong><small>Requests needing your attention first.</small></div>
+                <span id="todayPendingCount" class="section-count">0</span>
+              </div>
+              <div id="todayPendingRequests" class="appointment-list prominent-pending-list compact-dashboard-list"></div>
+            </section>
+
+            <section class="today-bookings-card">
+              <div class="booking-section-heading">
+                <div><strong>Today's Appointments</strong><small>Your confirmed schedule for today.</small></div>
+                <span id="todayMainCount" class="section-count">0</span>
+              </div>
+              <div id="todayMainAppointments" class="appointment-list compact-dashboard-list"></div>
+            </section>
+
+            <section class="today-upcoming-card">
+              <div class="booking-section-heading">
+                <div><strong>Coming Up</strong><small>Your next three future appointments.</small></div>
+                <button class="text-action" type="button" data-go-admin-tab="bookings">View all</button>
+              </div>
+              <div id="todayUpcomingPreview" class="appointment-list compact-dashboard-list"></div>
+            </section>
+          </section>
+
+          <aside class="today-side-column">
+            <section class="today-mini-calendar-card">
+              <div class="mini-calendar-header">
+                <button id="todayMiniPrev" class="square-nav" type="button" aria-label="Previous month">‹</button>
+                <h3 id="todayMiniMonthLabel"></h3>
+                <button id="todayMiniNext" class="square-nav" type="button" aria-label="Next month">›</button>
+              </div>
+              <div class="weekdays mini-weekdays">
+                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+              </div>
+              <div id="todayMiniCalendarGrid" class="calendar-grid today-mini-calendar"></div>
+              <button id="todayOpenSelectedDate" class="admin-outline full-button mini-calendar-action" type="button">Manage Selected Date</button>
+            </section>
+
+            <section class="today-side-actions">
+              <button class="today-side-action" type="button" data-go-admin-tab="day"><strong>Calendar & Availability</strong><small>Block hours, leave or custom days</small></button>
+              <button class="today-side-action" type="button" data-go-admin-tab="bookings"><strong>All Bookings</strong><small>Search, filter and manage history</small></button>
+              <button class="today-side-action" type="button" data-go-admin-tab="more"><strong>Settings & More</strong><small>Alerts, booking rules and audit history</small></button>
+            </section>
+          </aside>
+        </div>
+      </div>
+
+      <div class="admin-tab-panel hidden" data-admin-panel="day">
         <div class="calendar-workspace">
           <section class="admin-calendar dashboard-calendar-card">
             <div class="admin-calendar-header">
@@ -226,19 +286,29 @@
           </section>
 
           <section class="day-command-card">
-            <p class="modal-kicker">Selected Date</p>
-            <h3 id="adminSelectedDateLabel"></h3>
-            <div id="autoHoursInfo" class="auto-hours-info"></div>
-
-            <div class="primary-day-actions">
-              <label class="block-day-action">
-                <span><strong>Block Entire Day</strong><small>Close all appointments for this date.</small></span>
-                <input id="blockWholeDay" type="checkbox">
-              </label>
-              <button id="blockMorningBtn" class="quick-action-button" type="button"><strong>Block Morning</strong><small>Before 12h00</small></button>
-              <button id="blockAfternoonBtn" class="quick-action-button" type="button"><strong>Block Afternoon</strong><small>From 12h00</small></button>
-              <button id="restoreHoursBtn" class="quick-action-button restore-action" type="button"><strong>Restore Hours</strong><small>Reset manual time blocks</small></button>
+            <div class="selected-date-sticky">
+              <p class="modal-kicker">Selected Date</p>
+              <h3 id="adminSelectedDateLabel"></h3>
+              <div id="autoHoursInfo" class="auto-hours-info"></div>
             </div>
+
+            <details class="manage-day-drawer">
+              <summary><span><strong>Manage Day</strong><small>Block the day, morning or afternoon</small></span><b>＋</b></summary>
+              <div class="manage-day-drawer-body">
+                <div class="primary-day-actions">
+                  <label class="block-day-action">
+                    <span><strong>Block Entire Day</strong><small>Close all appointments for this date.</small></span>
+                    <input id="blockWholeDay" type="checkbox">
+                  </label>
+                  <button id="blockMorningBtn" class="quick-action-button" type="button"><strong>Block Morning</strong><small>Before 12h00</small></button>
+                  <button id="blockAfternoonBtn" class="quick-action-button" type="button"><strong>Block Afternoon</strong><small>From 12h00</small></button>
+                  <button id="restoreHoursBtn" class="quick-action-button restore-action" type="button"><strong>Restore Hours</strong><small>Reset manual time blocks</small></button>
+                </div>
+                <div class="admin-button-row day-save-row">
+                  <button id="saveDayBtn" class="admin-primary" type="button">Save Day Changes</button>
+                </div>
+              </div>
+            </details>
 
             <button class="go-add-booking admin-primary full-button" type="button" data-go-admin-tab="add">＋ Add Booking for This Date</button>
 
@@ -247,9 +317,7 @@
             </div>
             <div id="dayAppointments" class="appointment-list selected-day-appointments"></div>
 
-            <div class="admin-button-row day-save-row">
-              <button id="saveDayBtn" class="admin-primary" type="button">Save Day Changes</button>
-            </div>
+
           </section>
         </div>
 
@@ -392,54 +460,76 @@
         </div>
       </div>
 
-      <div class="admin-tab-panel hidden" data-admin-panel="settings">
-        <div class="settings-grid">
-          <section class="settings-card">
-            <div class="manage-heading"><strong>Booking Rules</strong><small>Applied automatically to public booking requests.</small></div>
-            <div class="range-grid">
-              <label>Default buffer<select id="settingBuffer"><option value="0">0 min</option><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></label>
-              <label>Minimum notice<select id="settingNotice"><option value="0">No minimum</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="240">4 hours</option><option value="720">12 hours</option><option value="1440">24 hours</option></select></label>
-              <label>Advance booking<input id="settingAdvance" type="number" min="1" max="365" value="60"><small>Maximum days clients may book ahead.</small></label>
-            </div>
-            <button id="saveSettingsBtn" class="admin-primary full-button" type="button">Save Booking Rules</button>
-          </section>
+      <div class="admin-tab-panel hidden" data-admin-panel="more">
+        <div class="more-panel-header">
+          <p class="modal-kicker">More</p>
+          <h3>Settings & Tools</h3>
+          <p class="admin-help">Less-used controls are grouped here to keep your daily schedule simple.</p>
+        </div>
 
-          <section class="settings-card">
-            <div class="manage-heading"><strong>Booking Alerts</strong><small>Notification controls live here so the daily workflow stays uncluttered.</small></div>
-            <div class="alert-settings-card">
-              <div class="alert-settings-copy"><strong id="alertStatusTitle">Booking alerts are off</strong><small id="alertStatusText">Enable alerts once on this device.</small></div>
-              <div class="alert-settings-actions">
-                <button id="enableAlertsBtn" class="admin-primary" type="button">Enable Booking Alerts</button>
-                <button id="toggleAlertSoundBtn" class="admin-outline" type="button">Mute Sound</button>
-                <button id="testAlertBtn" class="admin-outline" type="button">Test Alert</button>
+        <div class="more-settings-stack">
+          <details class="settings-accordion" open>
+            <summary><span><strong>Booking Rules</strong><small>Buffer, minimum notice and advance booking window.</small></span><b>＋</b></summary>
+            <div class="settings-accordion-body">
+              <div class="range-grid">
+                <label>Default buffer<select id="settingBuffer"><option value="0">0 min</option><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></label>
+                <label>Minimum notice<select id="settingNotice"><option value="0">No minimum</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="240">4 hours</option><option value="720">12 hours</option><option value="1440">24 hours</option></select></label>
+                <label>Advance booking<input id="settingAdvance" type="number" min="1" max="365" value="60"><small>Maximum days clients may book ahead.</small></label>
+              </div>
+              <button id="saveSettingsBtn" class="admin-primary full-button" type="button">Save Booking Rules</button>
+            </div>
+          </details>
+
+          <details class="settings-accordion">
+            <summary><span><strong>Notifications</strong><small>Booking alert, sound and test controls.</small></span><b>＋</b></summary>
+            <div class="settings-accordion-body">
+              <div class="alert-settings-card">
+                <div class="alert-settings-copy"><strong id="alertStatusTitle">Booking alerts are off</strong><small id="alertStatusText">Enable alerts once on this device.</small></div>
+                <div class="alert-settings-actions">
+                  <button id="enableAlertsBtn" class="admin-primary" type="button">Enable Booking Alerts</button>
+                  <button id="toggleAlertSoundBtn" class="admin-outline" type="button">Mute Sound</button>
+                  <button id="testAlertBtn" class="admin-outline" type="button">Test Alert</button>
+                </div>
               </div>
             </div>
-          </section>
+          </details>
 
-          <section class="settings-card">
-            <div class="manage-heading"><strong>Administrator Access</strong><small>Add authorised accounts through Supabase and the schedule_admins table.</small></div>
-            <p class="admin-help">The initial administrator remains <strong>infocampbellweb@gmail.com</strong>.</p>
-            <button class="admin-outline full-button" type="button" data-go-admin-tab="history">View Activity History</button>
-          </section>
-        </div>
-      </div>
+          <details class="settings-accordion">
+            <summary><span><strong>Business Hours & Availability</strong><small>Custom dates, holidays, leave and advanced availability.</small></span><b>＋</b></summary>
+            <div class="settings-accordion-body">
+              <p class="admin-help">Business hours and public holiday controls are managed from the Calendar screen under Advanced Options.</p>
+              <button class="admin-outline full-button" type="button" data-go-admin-tab="day">Open Calendar & Advanced Availability</button>
+            </div>
+          </details>
 
-      <div class="admin-tab-panel hidden" data-admin-panel="history">
-        <div class="history-toolbar">
-          <div><p class="modal-kicker">Audit Trail</p><h3>Activity History</h3></div>
-          <label class="search-field"><span>Search activity</span><input id="historySearch" type="search" placeholder="Action, date or administrator"></label>
+          <details class="settings-accordion">
+            <summary><span><strong>Activity History</strong><small>Search changes and undo the latest selected-day change.</small></span><b>＋</b></summary>
+            <div class="settings-accordion-body">
+              <div class="history-toolbar compact-history-toolbar">
+                <label class="search-field"><span>Search activity</span><input id="historySearch" type="search" placeholder="Action, date or administrator"></label>
+                <button id="undoDayBtn" class="admin-outline" type="button">Undo Last Selected-Day Change</button>
+              </div>
+              <div id="historyList" class="history-list"></div>
+            </div>
+          </details>
+
+          <details class="settings-accordion">
+            <summary><span><strong>Administrator Access</strong><small>Account and access information.</small></span><b>＋</b></summary>
+            <div class="settings-accordion-body">
+              <p class="admin-help">The initial administrator remains <strong>infocampbellweb@gmail.com</strong>. Additional authorised accounts can be managed through Supabase and the <code>schedule_admins</code> table.</p>
+            </div>
+          </details>
         </div>
-        <button id="undoDayBtn" class="admin-outline" type="button">Undo Last Change for Selected Date</button>
-        <div id="historyList" class="history-list"></div>
       </div>
 
       <p id="saveMessage" class="save-message global-save-message" aria-live="polite"></p>
 
+      <button id="floatingAddBookingBtn" class="floating-add-booking" type="button" aria-label="Add booking">＋</button>
       <nav class="mobile-admin-nav" aria-label="Mobile dashboard navigation">
-        <button type="button" class="mobile-admin-nav-button active" data-mobile-admin-tab="day"><span>▦</span><small>Calendar</small></button>
+        <button type="button" class="mobile-admin-nav-button active" data-mobile-admin-tab="today"><span>⌂</span><small>Today</small></button>
+        <button type="button" class="mobile-admin-nav-button" data-mobile-admin-tab="day"><span>▦</span><small>Calendar</small></button>
         <button type="button" class="mobile-admin-nav-button" data-mobile-admin-tab="bookings"><span>≣</span><small>Bookings</small><b id="mobilePendingCount" class="mobile-nav-badge hidden">0</b></button>
-        <button type="button" class="mobile-admin-nav-button add-nav-button" data-mobile-admin-tab="add"><span>＋</span><small>Add</small></button>
-        <button type="button" class="mobile-admin-nav-button" data-mobile-admin-tab="settings"><span>⚙</span><small>Settings</small></button>
+        <button type="button" class="mobile-admin-nav-button" data-mobile-admin-tab="more"><span>•••</span><small>More</small></button>
       </nav>
     </div>
   </div>
@@ -526,6 +616,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
