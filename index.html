@@ -453,6 +453,64 @@
       <div id="clientHistoryList" class="appointment-list"></div>
     </div>
   </div>
+
+  <div id="editBookingModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="editBookingTitle">
+    <div class="modal-card edit-booking-card">
+      <button class="modal-close" data-close="editBookingModal" aria-label="Close">×</button>
+      <p class="modal-kicker">Booking Management</p>
+      <h2 id="editBookingTitle">Edit Booking</h2>
+      <p id="editBookingStatusText" class="edit-booking-status"></p>
+
+      <div class="edit-booking-grid">
+        <label>Booking date
+          <input id="editBookingDate" type="date">
+        </label>
+        <label>Start time
+          <select id="editBookingStart"></select>
+        </label>
+        <label>Duration
+          <select id="editBookingDuration">
+            <option value="30">30 min</option>
+            <option value="60">60 min</option>
+            <option value="90">90 min</option>
+            <option value="120">120 min</option>
+          </select>
+        </label>
+        <label>Buffer
+          <select id="editBookingBuffer">
+            <option value="0">0 min</option>
+            <option value="15">15 min</option>
+            <option value="30">30 min</option>
+            <option value="45">45 min</option>
+            <option value="60">60 min</option>
+          </select>
+        </label>
+        <label>Service
+          <input id="editBookingService" type="text" placeholder="Massage service">
+        </label>
+        <label>Client name
+          <input id="editBookingClient" type="text" placeholder="Client name">
+        </label>
+        <label>Client phone
+          <input id="editBookingPhone" type="tel" placeholder="Client phone">
+        </label>
+        <label class="edit-booking-notes-field">Client notes
+          <textarea id="editBookingNotes" rows="3" placeholder="Optional client notes"></textarea>
+        </label>
+      </div>
+
+      <p class="edit-booking-help">
+        Changing the date or time checks the live calendar first. Confirmed and completed bookings remain blocked after editing.
+      </p>
+
+      <div class="edit-booking-actions">
+        <button class="admin-outline" type="button" data-close="editBookingModal">Cancel</button>
+        <button id="saveEditBookingBtn" class="admin-primary" type="button">Save Booking Changes</button>
+      </div>
+      <p id="editBookingMessage" class="form-error edit-booking-message" aria-live="polite"></p>
+    </div>
+  </div>
+
   <div id="bookingAlertPopup" class="booking-alert-popup hidden" role="alertdialog" aria-live="assertive" aria-labelledby="bookingAlertTitle">
     <div class="booking-alert-icon" aria-hidden="true">🔔</div>
     <div class="booking-alert-content">
@@ -468,6 +526,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

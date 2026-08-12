@@ -1,4 +1,4 @@
-const CACHE_NAME = "massage-by-ash-schedule-v8";
+const CACHE_NAME = "massage-by-ash-schedule-v9";
 const STATIC_ASSETS = [
   "./",
   "./index.html",

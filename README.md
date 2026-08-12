@@ -130,3 +130,18 @@ The therapist dashboard has been reorganised for faster phone use:
 Confirmed **and Completed** appointments continue to reserve their original appointment range plus buffer. Only a **Cancelled** booking releases that time.
 
 For an existing Supabase project, run `KEEP-COMPLETED-BOOKINGS-BLOCKED.sql` (or `RUN-THIS-ONCE-COMPLETED-BLOCKS.sql`) once in **Supabase → SQL Editor**. The fresh-install `supabase-setup.sql` and full `SUPABASE-UPGRADE.sql` also include this rule.
+
+
+## Booking correction controls
+
+This version adds:
+
+- **Edit** button on booking cards, including Pending, Confirmed, Completed and Cancelled bookings.
+- Edit booking date, start time, duration, buffer, service, client name, phone number and client notes.
+- Existing booking is excluded from its own overlap check when editing.
+- Confirmed and Completed bookings remain reserved after an edit.
+- **Delete** button permanently removes a mistaken booking and releases that booking's reserved time after confirmation.
+- Client phone numbers are shown as direct **WhatsApp links** in booking cards and Client History.
+- South African local numbers beginning with `0` are automatically converted to `27...` for WhatsApp links.
+- The mobile dashboard navigation is now **fixed directly to the bottom of the screen**.
+- Extra bottom padding is reserved inside the dashboard so the final Settings/History/booking controls remain fully readable above the fixed navigation.

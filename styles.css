@@ -1202,3 +1202,168 @@ input:focus,textarea:focus{
   .global-save-message{bottom:63px}
 }
 @media(max-width:420px){.today-glance{grid-template-columns:1fr 1fr}.primary-day-actions{grid-template-columns:1fr}.quick-action-button.restore-action{grid-column:auto}.appointment-actions{grid-template-columns:1fr}.admin-calendar-header{grid-template-columns:36px 1fr 36px}.admin-calendar-header .today-button{grid-column:1/-1;width:100%}}
+
+
+/* ===== Booking edit/delete + WhatsApp contact upgrade ===== */
+.client-row{
+  gap:7px;
+}
+.client-name-text{
+  font-size:.8rem;
+  font-weight:800;
+  color:var(--green-deep);
+}
+.client-whatsapp-link,
+.client-history-whatsapp{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:3px 8px;
+  border:1px solid rgba(8,112,83,.22);
+  border-radius:999px;
+  color:#07513c;
+  background:#edf8f3;
+  text-decoration:none;
+  font-size:.72rem;
+  font-weight:800;
+  white-space:nowrap;
+}
+.client-whatsapp-link::before,
+.client-history-whatsapp::before{
+  content:"WA";
+  width:20px;
+  height:20px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  color:#fff;
+  background:#0a7656;
+  font-size:.52rem;
+  font-weight:900;
+  letter-spacing:-.03em;
+}
+.client-whatsapp-link:hover,
+.client-history-whatsapp:hover{
+  border-color:#0a7656;
+  background:#dcf3e9;
+}
+.client-phone-text{
+  color:var(--muted);
+  font-size:.74rem;
+}
+.client-history-meta{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.edit-action{
+  border-color:#b69a47!important;
+  color:#72570b!important;
+  background:#fffaf0!important;
+}
+.edit-action:hover{
+  background:#fff0bd!important;
+}
+.delete-action{
+  border-color:#d9b0b0!important;
+  color:#942f2f!important;
+  background:#fff7f7!important;
+}
+.delete-action:hover{
+  border-color:#bd6565!important;
+  background:#ffeaea!important;
+}
+
+.edit-booking-card{
+  width:min(760px,94vw);
+}
+.edit-booking-status{
+  margin:-10px 0 17px;
+  color:var(--muted);
+  font-size:.78rem;
+}
+.edit-booking-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.edit-booking-notes-field{
+  grid-column:1/-1;
+}
+.edit-booking-help{
+  margin:14px 0 0;
+  padding:10px 12px;
+  border-left:3px solid var(--gold);
+  border-radius:8px;
+  color:#62675f;
+  background:#fff9e8;
+  font-size:.72rem;
+  line-height:1.5;
+}
+.edit-booking-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:9px;
+  margin-top:18px;
+}
+.edit-booking-message{
+  margin-top:8px;
+  text-align:right;
+}
+
+/* Keep the mobile navigation truly pinned to the bottom of the phone. */
+@media(max-width:680px){
+  .admin-dashboard-shell{
+    padding-bottom:calc(116px + env(safe-area-inset-bottom))!important;
+  }
+
+  .admin-tab-panel{
+    padding-bottom:12px;
+  }
+
+  .mobile-admin-nav{
+    position:fixed!important;
+    left:0!important;
+    right:0!important;
+    bottom:0!important;
+    z-index:160!important;
+    width:100%!important;
+    margin:0!important;
+    padding:7px 8px calc(7px + env(safe-area-inset-bottom))!important;
+    border-top:1px solid var(--border);
+    border-radius:16px 16px 0 0;
+    background:rgba(255,255,255,.985)!important;
+    backdrop-filter:blur(14px);
+    box-shadow:0 -10px 28px rgba(0,0,0,.14)!important;
+  }
+
+  .global-save-message{
+    bottom:calc(72px + env(safe-area-inset-bottom))!important;
+  }
+
+  .appointment-actions{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+
+  .edit-booking-grid{
+    grid-template-columns:1fr;
+  }
+  .edit-booking-notes-field{
+    grid-column:auto;
+  }
+  .edit-booking-actions{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .edit-booking-actions button{
+    width:100%;
+  }
+}
+
+@media(max-width:420px){
+  .appointment-actions{
+    grid-template-columns:1fr!important;
+  }
+}
