@@ -762,7 +762,15 @@ function appointmentMenuButton(text,fn,extraClass=''){
   b.type='button';
   b.className=`appointment-menu-item ${extraClass}`.trim();
   b.textContent=text;
-  b.addEventListener('click',e=>{e.preventDefault();const details=b.closest('details');if(details)details.open=false;fn();});
+  b.addEventListener('click',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const popover=b.closest('.appointment-menu-popover');
+    const ownerId=popover?.dataset.ownerMenuId;
+    const details=(ownerId&&document.getElementById(ownerId))||b.closest('details');
+    if(details)details.open=false;
+    fn();
+  });
   return b;
 }
 function whatsappActionLink(a,label='WhatsApp'){
@@ -773,6 +781,99 @@ function whatsappActionLink(a,label='WhatsApp'){
   link.href=url;link.target='_blank';link.rel='noopener';link.textContent=label;
   return link;
 }
+
+let activeFloatingAppointmentMenu=null;
+
+function closeFloatingAppointmentMenu(menu){
+  if(!menu)return;
+  const items=document.querySelector(`.appointment-menu-popover[data-owner-menu-id="${menu.id}"]`);
+  if(items && items.parentElement===document.body){
+    items.classList.remove('floating-appointment-popover');
+    items.removeAttribute('style');
+    menu.appendChild(items);
+  }
+  menu.classList.remove('menu-open-front');
+  if(menu.open)menu.open=false;
+  if(activeFloatingAppointmentMenu===menu)activeFloatingAppointmentMenu=null;
+}
+
+function positionFloatingAppointmentMenu(menu,summary,items){
+  if(!menu.open || items.parentElement!==document.body)return;
+
+  const buttonRect=summary.getBoundingClientRect();
+  const menuRect=items.getBoundingClientRect();
+  const edge=10;
+  const bottomNavAllowance=window.innerWidth<=680 ? 92 : 12;
+
+  let left=buttonRect.right-menuRect.width;
+  left=Math.max(edge,Math.min(left,window.innerWidth-menuRect.width-edge));
+
+  let top=buttonRect.bottom+6;
+  if(top+menuRect.height>window.innerHeight-bottomNavAllowance){
+    top=buttonRect.top-menuRect.height-6;
+  }
+  top=Math.max(edge,Math.min(top,window.innerHeight-menuRect.height-edge));
+
+  items.style.left=`${Math.round(left)}px`;
+  items.style.top=`${Math.round(top)}px`;
+}
+
+function enableFloatingAppointmentMenu(menu,summary,items){
+  menu.addEventListener('toggle',()=>{
+    if(menu.open){
+      if(activeFloatingAppointmentMenu && activeFloatingAppointmentMenu!==menu){
+        closeFloatingAppointmentMenu(activeFloatingAppointmentMenu);
+      }
+      activeFloatingAppointmentMenu=menu;
+      menu.classList.add('menu-open-front');
+
+      // Move the actual dropdown to <body>. This prevents booking cards,
+      // collapsed History groups, scroll panels, and modals from clipping it.
+      document.body.appendChild(items);
+      items.classList.add('floating-appointment-popover');
+      items.style.visibility='hidden';
+      items.style.display='block';
+
+      requestAnimationFrame(()=>{
+        positionFloatingAppointmentMenu(menu,summary,items);
+        items.style.visibility='visible';
+      });
+    }else{
+      if(items.parentElement===document.body){
+        items.classList.remove('floating-appointment-popover');
+        items.removeAttribute('style');
+        menu.appendChild(items);
+      }
+      menu.classList.remove('menu-open-front');
+      if(activeFloatingAppointmentMenu===menu)activeFloatingAppointmentMenu=null;
+    }
+  });
+}
+
+document.addEventListener('pointerdown',event=>{
+  const menu=activeFloatingAppointmentMenu;
+  if(!menu)return;
+  const items=document.querySelector(`.appointment-menu-popover[data-owner-menu-id="${menu.id}"]`);
+  if(menu.contains(event.target) || items?.contains(event.target))return;
+  closeFloatingAppointmentMenu(menu);
+});
+
+window.addEventListener('resize',()=>{
+  const menu=activeFloatingAppointmentMenu;
+  if(!menu || !menu.open)return;
+  const summary=menu.querySelector('summary');
+  const items=document.querySelector(`.appointment-menu-popover[data-owner-menu-id="${menu.id}"]`);
+  if(summary&&items)positionFloatingAppointmentMenu(menu,summary,items);
+});
+
+document.addEventListener('scroll',()=>{
+  const menu=activeFloatingAppointmentMenu;
+  if(!menu || !menu.open)return;
+  const summary=menu.querySelector('summary');
+  const items=document.querySelector(`.appointment-menu-popover[data-owner-menu-id="${menu.id}"]`);
+  if(summary&&items)positionFloatingAppointmentMenu(menu,summary,items);
+},true);
+
 function appointmentCard(a, includeActions=true) {
   const div=document.createElement('article');
   div.className=`appointment-card status-${a.status}${a.status==='pending'?' pending-emphasis':''}`;
@@ -820,14 +921,27 @@ function appointmentCard(a, includeActions=true) {
     }
 
     if(a.kind==='booking'){
-      const menu=document.createElement('details');menu.className='appointment-menu';
-      const summary=document.createElement('summary');summary.setAttribute('aria-label','More booking actions');summary.textContent='⋯';menu.appendChild(summary);
-      const items=document.createElement('div');items.className='appointment-menu-popover';
+      const menu=document.createElement('details');
+      menu.className='appointment-menu';
+      menu.id=`appointment-menu-${String(a.id||Date.now()).replace(/[^a-zA-Z0-9_-]/g,'-')}-${Math.random().toString(36).slice(2,7)}`;
+
+      const summary=document.createElement('summary');
+      summary.setAttribute('aria-label','More booking actions');
+      summary.textContent='⋯';
+      menu.appendChild(summary);
+
+      const items=document.createElement('div');
+      items.className='appointment-menu-popover';
+      items.dataset.ownerMenuId=menu.id;
+
       items.appendChild(appointmentMenuButton('Edit Booking',()=>openEditBooking(a),'edit-menu-action'));
       if(a.status==='confirmed'||a.status==='pending')items.appendChild(appointmentMenuButton('Cancel Booking',()=>updateAppointmentStatus(a.id,'cancelled'),'cancel-menu-action'));
       if(normalizeClientKey(a))items.appendChild(appointmentMenuButton('View Client History',()=>openClientHistory(a)));
       items.appendChild(appointmentMenuButton('Delete Booking',()=>deleteBooking(a),'delete-menu-action'));
-      menu.appendChild(items);row.appendChild(menu);
+
+      menu.appendChild(items);
+      enableFloatingAppointmentMenu(menu,summary,items);
+      row.appendChild(menu);
     }
     if(row.children.length)div.appendChild(row);
   }

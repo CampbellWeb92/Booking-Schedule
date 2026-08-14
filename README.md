@@ -163,3 +163,13 @@ This version adds:
 - **More** groups Booking Rules, Notifications, Business Hours/Availability, Activity History and Administrator Access into expandable sections.
 - Client History now includes a concise visit summary with the most recent past visit.
 - Extra bottom spacing ensures the fixed mobile navigation and floating Add button never cover the final controls.
+
+
+## Booking menu display fix
+
+- The Edit / Cancel / Client History / Delete menu is now moved temporarily to the document body while open.
+- This prevents the dropdown from loading behind booking cards, History sections, scroll areas, or modal content.
+- The menu is anchored to the right side of the `⋯` button and automatically stays inside the phone screen.
+- When there is not enough room underneath a card, it opens upward instead.
+- Tapping elsewhere closes the menu.
+- Mobile menu options have larger touch targets and remain above the fixed bottom navigation.
