@@ -1622,3 +1622,108 @@ input:focus,textarea:focus{
     font-size:.74rem !important;
   }
 }
+
+
+/* ===== True background Web Push ===== */
+.background-push-card{
+  margin-top:14px;
+  padding:14px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+  border:1px solid rgba(7,81,60,.16);
+  border-radius:14px;
+  background:linear-gradient(135deg,#eef8f4,#fffaf0);
+}
+.background-push-copy strong,
+.background-push-copy small{display:block}
+.background-push-copy strong{margin-top:5px;color:var(--green-deep);font-size:.84rem}
+.background-push-copy small{margin-top:4px;color:var(--muted);font-size:.7rem;line-height:1.5}
+.push-badge{
+  display:inline-flex;
+  padding:4px 7px;
+  border-radius:999px;
+  color:#fff;
+  background:#07513c;
+  font-size:.55rem;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+.background-push-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.background-push-actions button{white-space:nowrap}
+.danger-soft{color:#943535!important;border-color:#ddbcbc!important;background:#fff7f7!important}
+@media(max-width:680px){
+  .background-push-card{grid-template-columns:1fr}
+  .background-push-actions{display:grid;grid-template-columns:1fr;justify-content:stretch}
+  .background-push-actions button{width:100%}
+}
+
+
+/* ===== Simplified owner view ===== */
+.business-hours-bar,
+.contact-strip{
+  display:none !important;
+}
+
+.website-only-strip{
+  margin-top:16px;
+  display:flex;
+  justify-content:center;
+  padding:8px 0 2px;
+}
+
+.website-only-button{
+  min-width:min(420px,92%);
+  min-height:62px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:14px;
+  padding:12px 24px;
+  border:1.5px solid #ffe39a;
+  border-radius:999px;
+  color:#17130a;
+  background:linear-gradient(180deg,#f6d875,#dba938);
+  box-shadow:0 12px 30px rgba(0,0,0,.18);
+  text-decoration:none;
+  transition:transform .16s ease, box-shadow .16s ease;
+}
+
+.website-only-button:hover{
+  transform:translateY(-1px);
+  box-shadow:0 16px 34px rgba(0,0,0,.22);
+}
+
+.website-only-button span:last-child{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+
+.website-only-button small{
+  font-size:10px;
+  font-weight:700;
+}
+
+.website-only-button strong{
+  font-size:14px;
+}
+
+.website-only-icon{
+  font-size:28px;
+  font-weight:700;
+}
+
+@media(max-width:700px){
+  .website-only-strip{
+    margin-top:12px;
+    padding-inline:10px;
+  }
+
+  .website-only-button{
+    width:100%;
+    min-width:0;
+    min-height:58px;
+  }
+}

@@ -96,54 +96,12 @@
         </div>
       </aside>
     </section>
-
-    <section class="business-hours-bar">
-      <div class="business-title">
-        <span class="business-clock" aria-hidden="true"></span>
-        <div>
-          <h2>Business Hours</h2>
-          <p>Click a day above to view availability</p>
-        </div>
-      </div>
-
-      <div class="hours-item">
-        <strong>Tue – Fri</strong>
-        <span>09h00 – 17h00</span>
-      </div>
-      <div class="hours-item">
-        <strong>Saturday</strong>
-        <span>09h00 – 15h00</span>
-      </div>
-      <div class="hours-item">
-        <strong>Sunday</strong>
-        <span>Closed</span>
-      </div>
-      <div class="hours-item">
-        <strong>Monday</strong>
-        <span>Closed</span>
-      </div>
-      <div class="hours-item holiday-hours">
-        <strong>Public Holidays <em>★</em></strong>
-        <span>09h00 – 15h00</span>
-      </div>
-    </section>
-
-    <section class="contact-strip">
-      <div class="contact-copy">
-        <h2>Get In Touch</h2>
-        <p>For enquiries, bookings or more information</p>
-      </div>
-
-      <a class="contact-button whatsapp-button" href="https://wa.me/27795567466" target="_blank" rel="noopener">
-        <span class="whatsapp-mark" aria-hidden="true">☎</span>
-        <span>
-          <small>WhatsApp</small>
-          <strong>079 556 7466</strong>
-        </span>
-      </a>
-
-      <a class="contact-button website-button" href="https://massagebyash.co.za" target="_blank" rel="noopener">
-        <span class="globe-mark" aria-hidden="true">◎</span>
+    <section class="website-only-strip">
+      <a class="website-only-button"
+         href="https://massagebyash.co.za"
+         target="_blank"
+         rel="noopener">
+        <span class="website-only-icon" aria-hidden="true">◎</span>
         <span>
           <small>Visit Website</small>
           <strong>massagebyash.co.za</strong>
@@ -488,7 +446,20 @@
                 <div class="alert-settings-actions">
                   <button id="enableAlertsBtn" class="admin-primary" type="button">Enable Booking Alerts</button>
                   <button id="toggleAlertSoundBtn" class="admin-outline" type="button">Mute Sound</button>
-                  <button id="testAlertBtn" class="admin-outline" type="button">Test Alert</button>
+                  <button id="testAlertBtn" class="admin-outline" type="button">Test In-App Alert</button>
+                </div>
+
+                <div class="background-push-card">
+                  <div class="background-push-copy">
+                    <span class="push-badge">BACKGROUND PUSH</span>
+                    <strong id="backgroundPushStatusTitle">Checking this device…</strong>
+                    <small id="backgroundPushStatusText">Background push works after this phone is registered once. You can then sign out and still receive new booking notifications.</small>
+                  </div>
+                  <div class="background-push-actions">
+                    <button id="enableBackgroundPushBtn" class="admin-primary" type="button">Enable Background Push</button>
+                    <button id="testBackgroundPushBtn" class="admin-outline" type="button">Test Background Push</button>
+                    <button id="disableBackgroundPushBtn" class="admin-outline danger-soft hidden" type="button">Disable on This Device</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -616,6 +587,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

@@ -173,3 +173,19 @@ This version adds:
 - When there is not enough room underneath a card, it opens upward instead.
 - Tapping elsewhere closes the menu.
 - Mobile menu options have larger touch targets and remain above the fixed bottom navigation.
+
+
+## Background push notification upgrade
+
+This build includes true Web Push support. Register an authorised therapist phone once from More → Notifications → Enable Background Push. The subscription is saved in Supabase and intentionally remains active after logout. New Pending website booking requests can then be pushed by the included Supabase Edge Function/database webhook even while the admin app is signed out or closed.
+
+See `PUSH-NOTIFICATION-SETUP.md` and `PUSH-NOTIFICATIONS-SETUP.sql`. Server-only secret values are delivered separately and must not be uploaded with the website.
+
+
+## Simplified owner-only screen
+
+- Removed the public Business Hours strip from the app view.
+- Removed the Get In Touch section.
+- Removed the static business WhatsApp number/button from the public layout.
+- Kept only the website link: `massagebyash.co.za`.
+- Booking/client WhatsApp links inside the therapist booking dashboard are unchanged.

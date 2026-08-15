@@ -1,4 +1,4 @@
-const CACHE_NAME = "massage-by-ash-schedule-v11";
+const CACHE_NAME = "massage-by-ash-schedule-v13";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
@@ -41,6 +41,37 @@ self.addEventListener("fetch", event => {
   );
 });
 
+
+
+
+self.addEventListener("push", event => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (_) {
+    payload = { body: event.data ? event.data.text() : "New booking request" };
+  }
+
+  const title = payload.title || "New Booking Request";
+  const data = payload.data || {};
+  const options = {
+    body: payload.body || "A new booking request has been received.",
+    icon: "./images/logo-clean.png",
+    badge: "./images/logo-clean.png",
+    tag: data.appointmentId ? `mba-booking-${data.appointmentId}` : "mba-booking-push",
+    renotify: true,
+    requireInteraction: true,
+    silent: false,
+    vibrate: [180, 80, 180, 80, 260],
+    timestamp: Date.now(),
+    data: {
+      appointmentId: data.appointmentId || null,
+      url: data.url || "./?pending=1"
+    }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
 
 self.addEventListener("notificationclick", event => {
   event.notification.close();

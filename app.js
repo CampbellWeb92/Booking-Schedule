@@ -255,7 +255,7 @@ $('loginForm')?.addEventListener('submit',async e=>{
   if(pendingAlertOpenRequested){pendingAlertOpenRequested=false;await openAdmin();activateBookingsTab();}
   else openAdmin();
 });
-$('logoutBtn')?.addEventListener('click',async()=>{stopBookingMonitor();adminRealtimeSubscribed=false;await removeAdminRealtimeChannels();await db.auth.signOut();closeModal('adminModal');});
+$('logoutBtn')?.addEventListener('click',async()=>{stopBookingMonitor();adminRealtimeSubscribed=false;await removeAdminRealtimeChannels();/* Background Web Push subscription intentionally remains registered on this device. */await db.auth.signOut();closeModal('adminModal');});
 
 async function loadAppointments() {
   const {data,error}=await db.from('appointments').select('*').order('day',{ascending:true}).order('start_time',{ascending:true});
@@ -268,8 +268,8 @@ async function loadHistory() {
 }
 async function refreshAdminData(render=true) {
   await Promise.all([loadAppointments(),loadHistory()]);
-  if(render) { await loadAdminDraft(); renderAdmin(); renderBookingsPanels(); renderSettings(); renderHistory(); updateAlertSettingsUI(); }
-  else { renderBookingsPanels(); renderHistory(); updateAlertSettingsUI(); }
+  if(render) { await loadAdminDraft(); renderAdmin(); renderBookingsPanels(); renderSettings(); renderHistory(); updateAlertSettingsUI(); updateBackgroundPushUI(); }
+  else { renderBookingsPanels(); renderHistory(); updateAlertSettingsUI(); updateBackgroundPushUI(); }
 }
 
 function rememberAlertedPendingId(id) {
@@ -373,12 +373,188 @@ function notificationPermissionText() {
   return 'Device notification permission has not been granted yet.';
 }
 
+
+function urlBase64ToUint8Array(base64String) {
+  const padding='='.repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(base64);
+  return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)));
+}
+
+async function getPushServiceWorkerRegistration() {
+  if(!('serviceWorker' in navigator)) return null;
+  let registration=await navigator.serviceWorker.getRegistration();
+  if(!registration) registration=await navigator.serviceWorker.ready;
+  return registration||null;
+}
+
+async function getCurrentPushSubscription() {
+  try {
+    const registration=await getPushServiceWorkerRegistration();
+    if(!registration || !('PushManager' in window)) return null;
+    return await registration.pushManager.getSubscription();
+  } catch(error) {
+    console.info('Could not read background push subscription:',error);
+    return null;
+  }
+}
+
+function backgroundPushSupported() {
+  return location.protocol==='https:' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    'Notification' in window &&
+    !!window.WEB_PUSH_VAPID_PUBLIC_KEY;
+}
+
+async function updateBackgroundPushUI() {
+  const title=$('backgroundPushStatusTitle');
+  const text=$('backgroundPushStatusText');
+  const enable=$('enableBackgroundPushBtn');
+  const test=$('testBackgroundPushBtn');
+  const disable=$('disableBackgroundPushBtn');
+  if(!title||!text) return;
+
+  if(!backgroundPushSupported()) {
+    title.textContent='Background push is not available here';
+    text.textContent=location.protocol!=='https:'
+      ? 'Host/install the app over HTTPS before enabling background push.'
+      : 'This browser does not support Web Push, or the VAPID public key has not been configured.';
+    if(enable) enable.disabled=true;
+    if(test) test.disabled=true;
+    disable?.classList.add('hidden');
+    return;
+  }
+
+  const subscription=await getCurrentPushSubscription();
+  if(subscription) {
+    title.textContent='Background push is registered on this device';
+    text.textContent='New website booking requests can notify this phone even when you are signed out or the schedule page is not open. Tapping a notification will still ask you to sign in before managing the booking.';
+    if(enable){enable.textContent='Push Enabled';enable.disabled=true;}
+    if(test) test.disabled=false;
+    disable?.classList.remove('hidden');
+  } else {
+    title.textContent='Background push is not registered yet';
+    text.textContent='Sign in once and tap Enable Background Push. The device subscription remains registered after you sign out.';
+    if(enable){enable.textContent='Enable Background Push';enable.disabled=false;}
+    if(test) test.disabled=true;
+    disable?.classList.add('hidden');
+  }
+}
+
+async function savePushSubscription(subscription) {
+  const user=await currentUser();
+  if(!user || !await isAuthorizedAdmin(user)) throw new Error('Sign in as an authorised therapist before registering this phone.');
+
+  const json=subscription.toJSON();
+  const p256dh=json.keys?.p256dh;
+  const auth=json.keys?.auth;
+  if(!json.endpoint || !p256dh || !auth) throw new Error('This browser did not return a complete push subscription.');
+
+  const {error}=await db.from('push_subscriptions').upsert({
+    user_id:user.id,
+    endpoint:json.endpoint,
+    p256dh,
+    auth,
+    user_agent:navigator.userAgent||'',
+    device_label:`${navigator.platform||'Device'} · ${new Date().toLocaleDateString('en-ZA')}`,
+    enabled:true,
+    updated_at:new Date().toISOString()
+  },{onConflict:'endpoint'});
+  if(error) throw error;
+}
+
+async function enableBackgroundPush() {
+  if(!db) return;
+  if(!backgroundPushSupported()) {
+    message('Background push requires the hosted HTTPS/PWA version of the app.',true);
+    await updateBackgroundPushUI();
+    return;
+  }
+
+  const user=await currentUser();
+  if(!user || !await isAuthorizedAdmin(user)) {
+    message('Sign in as the therapist once before registering this phone for background push.',true);
+    return;
+  }
+
+  try {
+    if(Notification.permission==='default') await Notification.requestPermission();
+    if(Notification.permission!=='granted') throw new Error('Notification permission was not granted.');
+
+    const registration=await getPushServiceWorkerRegistration();
+    if(!registration) throw new Error('The service worker is not ready yet. Reopen the installed app and try again.');
+
+    let subscription=await registration.pushManager.getSubscription();
+    if(!subscription) {
+      subscription=await registration.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:urlBase64ToUint8Array(window.WEB_PUSH_VAPID_PUBLIC_KEY)
+      });
+    }
+
+    await savePushSubscription(subscription);
+    bookingAlertsEnabled=true;
+    localStorage.setItem('mba_booking_alerts_enabled','true');
+    await updateBackgroundPushUI();
+    updateAlertSettingsUI();
+    message('Background push is enabled on this phone. You may sign out and still receive new booking notifications.');
+  } catch(error) {
+    console.error(error);
+    message(error.message||'Could not enable background push on this device.',true);
+    await updateBackgroundPushUI();
+  }
+}
+
+async function disableBackgroundPush() {
+  try {
+    const subscription=await getCurrentPushSubscription();
+    if(!subscription){await updateBackgroundPushUI();return;}
+
+    if(db) {
+      const user=await currentUser();
+      if(user && await isAuthorizedAdmin(user)) {
+        await db.from('push_subscriptions').delete().eq('endpoint',subscription.endpoint);
+      }
+    }
+    await subscription.unsubscribe();
+    await updateBackgroundPushUI();
+    message('Background push has been disabled on this device.');
+  } catch(error) {
+    console.error(error);
+    message('Could not disable background push on this device.',true);
+  }
+}
+
+async function testBackgroundPush() {
+  try {
+    const subscription=await getCurrentPushSubscription();
+    if(!subscription) throw new Error('Enable Background Push on this device first.');
+    const {data:sessionData}=await db.auth.getSession();
+    const token=sessionData?.session?.access_token;
+    if(!token) throw new Error('Sign in to send a server-side test push. Receiving future pushes will not require you to remain signed in.');
+
+    const response=await fetch(`${window.SUPABASE_URL}/functions/v1/send-booking-push`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+      body:JSON.stringify({type:'TEST_PUSH'})
+    });
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(result.error||`Push test failed (${response.status}).`);
+    const sent=Number(result.sent??0);
+    message(sent>0 ? `Background push test sent to ${sent} registered device${sent===1?'':'s'}.` : 'The push server is working, but no registered push device was found. Disable and re-enable Background Push on this phone, then test again.');
+  } catch(error) {
+    console.error(error);
+    message(error.message||'Could not send the background push test.',true);
+  }
+}
+
 function updateAlertSettingsUI() {
   const title=$('alertStatusTitle'), text=$('alertStatusText'), enable=$('enableAlertsBtn'), sound=$('toggleAlertSoundBtn');
   if (!title || !text) return;
   if (bookingAlertsEnabled) {
     title.textContent='Booking alerts are enabled';
-    text.textContent=`Live booking checks are on. ${bookingAlertSoundEnabled?'Chime is on.':'Chime is muted.'} ${notificationPermissionText()}`;
+    text.textContent=`In-app booking checks are on while the schedule is running. ${bookingAlertSoundEnabled?'Chime is on.':'Chime is muted.'} ${notificationPermissionText()}`;
     if(enable) enable.textContent='Alerts Enabled';
   } else {
     title.textContent='Booking alerts are off';
@@ -401,7 +577,14 @@ async function enableBookingAlerts({playConfirmation=true,scanNow=true}={}) {
   updateAlertSettingsUI();
   startBookingMonitor();
   if (scanNow) await scanForPendingBookingAlerts({includeExisting:true});
-  message('Booking alerts are enabled. New website requests will be checked live and by fallback polling.');
+  const signedInUser=await currentUser();
+  if(signedInUser && await isAuthorizedAdmin(signedInUser) && backgroundPushSupported()) {
+    const existingPush=await getCurrentPushSubscription();
+    if(!existingPush) {
+      try { await enableBackgroundPush(); } catch(error) { console.info('Background push registration was not completed:',error); }
+    }
+  }
+  message('Booking alerts are enabled. Background push will continue after sign-out once this device is registered.');
 }
 
 function dismissBookingAlert() {
@@ -582,6 +765,9 @@ async function subscribeAdminRealtime() {
 }
 
 $('enableAlertsBtn')?.addEventListener('click',()=>enableBookingAlerts());
+$('enableBackgroundPushBtn')?.addEventListener('click',enableBackgroundPush);
+$('testBackgroundPushBtn')?.addEventListener('click',testBackgroundPush);
+$('disableBackgroundPushBtn')?.addEventListener('click',disableBackgroundPush);
 $('toggleAlertSoundBtn')?.addEventListener('click',async()=>{
   bookingAlertSoundEnabled=!bookingAlertSoundEnabled;
   localStorage.setItem('mba_booking_alert_sound',String(bookingAlertSoundEnabled));
@@ -1362,6 +1548,7 @@ async function init(){
     await loadPublicData();
     subscribeRealtime();
     updateAlertSettingsUI();
+    await updateBackgroundPushUI();
     const existingUser=await currentUser();
     const existingAdmin=existingUser && await isAuthorizedAdmin(existingUser);
     if(existingAdmin){
