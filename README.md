@@ -189,3 +189,8 @@ See `PUSH-NOTIFICATION-SETUP.md` and `PUSH-NOTIFICATIONS-SETUP.sql`. Server-only
 - Removed the static business WhatsApp number/button from the public layout.
 - Kept only the website link: `massagebyash.co.za`.
 - Booking/client WhatsApp links inside the therapist booking dashboard are unchanged.
+
+
+## Push SQL correction
+
+The push setup SQL no longer uses the `supabase_functions` schema. Use `PUSH-SUBSCRIPTIONS-ONLY-NO-SUPABASE-FUNCTIONS.sql` and create the appointments webhook from Supabase Dashboard → Database → Webhooks.

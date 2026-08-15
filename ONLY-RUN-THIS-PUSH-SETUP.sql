@@ -1,10 +1,5 @@
--- Massage by Ash - Background Push subscription setup
--- SAFE VERSION: this file contains NO supabase_functions.http_request calls.
--- Run this once in Supabase Dashboard -> SQL Editor.
---
--- IMPORTANT:
--- The actual appointments -> Edge Function webhook must be created in
--- Supabase Dashboard -> Database -> Webhooks, NOT in this SQL file.
+-- MASSAGE BY ASH - PUSH SUBSCRIPTION SETUP
+-- Run this file ONCE in Supabase Dashboard -> SQL Editor.
 
 begin;
 
@@ -99,10 +94,3 @@ for each row
 execute function public.touch_push_subscription();
 
 commit;
-
--- STOP HERE.
--- Do NOT add:
---   execute function supabase_functions.http_request(...)
---
--- Create the booking webhook from:
--- Supabase Dashboard -> Database -> Webhooks
